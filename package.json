@@ -54,6 +54,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:database": "./scripts/test-database.sh"
+    "test:database": "./scripts/test-database.sh",
+    "test:web-bundle": "node scripts/check-web-bundle.mjs"
   }
 }

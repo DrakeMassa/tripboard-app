@@ -16,3 +16,6 @@ create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
 $$;
 grant select on auth.users to authenticated;
+-- Model permissive platform defaults that the migration must explicitly remove.
+alter default privileges in schema public grant all on tables to anon;
+alter default privileges in schema public grant execute on functions to anon;

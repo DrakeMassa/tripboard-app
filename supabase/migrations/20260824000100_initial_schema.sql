@@ -231,10 +231,17 @@ for each row execute function public.set_updated_at();
 create or replace function public.prevent_created_by_change()
 returns trigger
 language plpgsql
+security definer
 set search_path = ''
 as $$
 begin
-  if new.created_by is distinct from old.created_by then
+  if new.created_by is distinct from old.created_by
+    and not (
+      old.created_by is not null
+      and new.created_by is null
+      and not exists (select 1 from auth.users where id = old.created_by)
+    )
+  then
     raise exception 'created_by is immutable';
   end if;
   return new;
@@ -268,6 +275,40 @@ create trigger clips_trip_immutable before update on public.trip_clips for each 
 create trigger itinerary_trip_immutable before update on public.itinerary_items for each row execute function public.prevent_trip_identity_change();
 create trigger expenses_trip_immutable before update on public.expenses for each row execute function public.prevent_trip_identity_change();
 create trigger participants_trip_immutable before update on public.trip_participants for each row execute function public.prevent_trip_identity_change();
+
+create or replace function public.prevent_participant_user_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.user_id is distinct from old.user_id
+    and not (
+      old.user_id is not null
+      and new.user_id is null
+      and not exists (select 1 from auth.users where id = old.user_id)
+    )
+  then
+    raise exception 'participant user_id is immutable';
+  end if;
+  return new;
+end;
+$$;
+create trigger participants_user_immutable before update on public.trip_participants
+for each row execute function public.prevent_participant_user_change();
+
+create or replace function public.prevent_expense_split_identity_change()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.trip_id is distinct from old.trip_id
+    or new.expense_id is distinct from old.expense_id
+    or new.participant_id is distinct from old.participant_id
+  then raise exception 'expense split identity is immutable'; end if;
+  return new;
+end; $$;
+create trigger expense_splits_identity_immutable before update on public.expense_splits
+for each row execute function public.prevent_expense_split_identity_change();
 
 create or replace function public.validate_iana_time_zone()
 returns trigger language plpgsql stable set search_path = '' as $$
@@ -515,7 +556,6 @@ set search_path = ''
 as $$
 declare
   v_invitation public.trip_invitations%rowtype;
-  v_inserted integer;
   v_email text;
   v_confirmed_at timestamptz;
 begin
@@ -541,20 +581,23 @@ begin
     raise exception 'Invitation is for a different email address';
   end if;
 
-  insert into public.trip_members (trip_id, user_id, role, invited_by)
-  values (v_invitation.trip_id, auth.uid(), v_invitation.role, v_invitation.invited_by)
-  on conflict (trip_id, user_id) do nothing;
+  if exists (
+    select 1 from public.trip_members
+    where trip_id = v_invitation.trip_id and user_id = auth.uid()
+  ) then
+    raise exception 'Already a trip member';
+  end if;
 
-  get diagnostics v_inserted = row_count;
+  insert into public.trip_members (trip_id, user_id, role, invited_by)
+  values (v_invitation.trip_id, auth.uid(), v_invitation.role, v_invitation.invited_by);
 
   insert into public.trip_participants (trip_id, user_id, display_name)
   values (v_invitation.trip_id, auth.uid(), coalesce((select display_name from public.profiles where id = auth.uid()), v_email))
   on conflict (trip_id, user_id) where user_id is not null do update set status = 'active', removed_at = null;
-  if v_inserted = 1 then
-    update public.trip_invitations
-    set use_count = use_count + 1
-    where id = v_invitation.id;
-  end if;
+
+  update public.trip_invitations
+  set use_count = use_count + 1
+  where id = v_invitation.id;
 
   return v_invitation.trip_id;
 end;
@@ -718,6 +761,8 @@ revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.prevent_trip_owner_change() from public, anon, authenticated;
 revoke all on function public.prevent_created_by_change() from public, anon, authenticated;
 revoke all on function public.prevent_trip_identity_change() from public, anon, authenticated;
+revoke all on function public.prevent_participant_user_change() from public, anon, authenticated;
+revoke all on function public.prevent_expense_split_identity_change() from public, anon, authenticated;
 revoke all on function public.protect_owner_membership() from public, anon, authenticated;
 revoke all on function public.validate_iana_time_zone() from public, anon, authenticated;
 revoke all on function public.validate_travel_time_zones() from public, anon, authenticated;

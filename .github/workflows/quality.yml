@@ -33,4 +33,4 @@ jobs:
         env:
           EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fake_ci_value
-      - run: test -f dist/index.html && ! grep -q 'EXPO_ROUTER_ERROR' dist/index.html
+      - run: npm run test:web-bundle

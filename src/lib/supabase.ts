@@ -1,6 +1,5 @@
 import 'react-native-url-polyfill/auto';
 
-import { navigatorLock } from '@supabase/auth-js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 
@@ -20,7 +19,6 @@ export const supabase: SupabaseClient | null =
           persistSession: Boolean(storage),
           detectSessionInUrl: Platform.OS === 'web',
           flowType: 'pkce',
-          lock: navigatorLock,
         },
       })
     : null;
