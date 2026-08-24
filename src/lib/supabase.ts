@@ -2,19 +2,14 @@ import 'react-native-url-polyfill/auto';
 
 import { navigatorLock } from '@supabase/auth-js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import Storage from 'expo-sqlite/kv-store';
 import { AppState, Platform } from 'react-native';
+
+import storage from '@/lib/supabase-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
-
-const browserStorage =
-  typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-    ? window.localStorage
-    : undefined;
-const storage = Platform.OS === 'web' ? browserStorage : Storage;
 
 export const supabase: SupabaseClient | null =
   supabaseUrl && supabasePublishableKey
