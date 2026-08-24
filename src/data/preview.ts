@@ -12,6 +12,7 @@ export const previewTrip: TripPreview = {
   arrivals: [
     {
       id: 'arrival-clay',
+      participantId: 'participant-clay',
       name: 'Clay',
       initials: 'CL',
       route: 'JFK → FCO · DL 230',
@@ -20,6 +21,7 @@ export const previewTrip: TripPreview = {
     },
     {
       id: 'arrival-maya',
+      participantId: 'participant-maya',
       name: 'Maya',
       initials: 'MY',
       route: 'LHR → FCO · BA 552',

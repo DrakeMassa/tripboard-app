@@ -1,13 +1,23 @@
 name: Quality
-
 on:
   pull_request:
   push:
     branches: [main]
-
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tripboard_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tripboard_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,4 +28,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:database
       - run: npm run build:web
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fake_ci_value
+      - run: test -f dist/index.html && ! grep -q 'EXPO_ROUTER_ERROR' dist/index.html

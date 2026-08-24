@@ -7,7 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 
 const checklist = [
   { label: 'Universal app foundation', done: true },
-  { label: 'Secure database migration', done: true },
+  { label: 'Review database migration', done: false },
   { label: 'Connect Supabase environment', done: isSupabaseConfigured },
   { label: 'Enable native share extension', done: false },
 ];
