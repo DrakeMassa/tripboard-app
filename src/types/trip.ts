@@ -1,5 +1,6 @@
 export type TravelerArrival = {
   id: string;
+  participantId: string;
   name: string;
   initials: string;
   route: string;
@@ -34,4 +35,23 @@ export type ClipPreview = {
   place: string;
   addedBy: string;
   accent: string;
+};
+
+
+export type TripParticipant = {
+  id: string;
+  tripId: string;
+  userId: string | null;
+  displayName: string;
+  status: 'active' | 'removed';
+  removedAt: string | null;
+};
+
+export type Expense = {
+  id: string;
+  tripId: string;
+  createdBy: string | null;
+  paidByParticipantId: string;
+  amountMinor: number;
+  currency: string;
 };

@@ -8,6 +8,7 @@ create type public.travel_kind as enum ('flight', 'train', 'car', 'ferry', 'bus'
 create type public.clip_source as enum ('tiktok', 'instagram', 'youtube', 'web', 'other');
 create type public.clip_status as enum ('pending', 'ready', 'failed');
 create type public.place_category as enum ('restaurant', 'attraction', 'stay', 'transit', 'shopping', 'other');
+create type public.participant_status as enum ('active', 'removed');
 
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -40,13 +41,27 @@ create table public.trip_members (
   primary key (trip_id, user_id)
 );
 
+create table public.trip_participants (
+  id uuid primary key default extensions.gen_random_uuid(),
+  trip_id uuid not null references public.trips (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete set null,
+  display_name text not null check (nullif(trim(display_name), '') is not null),
+  status public.participant_status not null default 'active',
+  removed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (trip_id, id),
+  constraint participant_status_lifecycle check ((status = 'active' and removed_at is null) or (status = 'removed' and removed_at is not null))
+);
+create unique index trip_participants_trip_user_idx on public.trip_participants (trip_id, user_id) where user_id is not null;
+
 create table public.trip_invitations (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
   token_hash bytea not null unique,
   role public.trip_role not null default 'member' check (role <> 'organizer'),
   invited_email text,
-  invited_by uuid not null references auth.users (id) on delete cascade,
+  invited_by uuid references auth.users (id) on delete set null,
   expires_at timestamptz not null,
   max_uses integer not null default 1 check (max_uses between 1 and 100),
   use_count integer not null default 0 check (use_count >= 0 and use_count <= max_uses),
@@ -57,9 +72,8 @@ create table public.trip_invitations (
 create table public.travel_segments (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  traveler_user_id uuid references auth.users (id) on delete set null,
-  traveler_name text,
-  created_by uuid not null references auth.users (id) on delete restrict,
+  participant_id uuid not null,
+  created_by uuid references auth.users (id) on delete set null,
   kind public.travel_kind not null,
   provider text,
   service_number text,
@@ -72,16 +86,13 @@ create table public.travel_segments (
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint travel_time_order check (arrives_at is null or arrives_at >= departs_at),
-  constraint travel_has_traveler check (
-    traveler_user_id is not null or nullif(trim(traveler_name), '') is not null
-  )
+  constraint travel_time_order check (arrives_at is null or arrives_at >= departs_at)
 );
 
 create table public.accommodations (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  created_by uuid not null references auth.users (id) on delete restrict,
+  created_by uuid references auth.users (id) on delete set null,
   name text not null,
   address text,
   check_in_at timestamptz,
@@ -99,7 +110,7 @@ create table public.accommodations (
 create table public.places (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  created_by uuid not null references auth.users (id) on delete restrict,
+  created_by uuid references auth.users (id) on delete set null,
   name text not null,
   category public.place_category not null default 'other',
   address text,
@@ -110,14 +121,15 @@ create table public.places (
   reservation_url text,
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (trip_id, id)
 );
 
 create table public.trip_clips (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  created_by uuid not null references auth.users (id) on delete restrict,
-  place_id uuid references public.places (id) on delete set null,
+  created_by uuid references auth.users (id) on delete set null,
+  place_id uuid,
   source public.clip_source not null,
   source_url text not null,
   title text,
@@ -133,8 +145,8 @@ create table public.trip_clips (
 create table public.itinerary_items (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  created_by uuid not null references auth.users (id) on delete restrict,
-  place_id uuid references public.places (id) on delete set null,
+  created_by uuid references auth.users (id) on delete set null,
+  place_id uuid,
   title text not null,
   details text,
   starts_at timestamptz not null,
@@ -149,24 +161,33 @@ create table public.itinerary_items (
 create table public.expenses (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips (id) on delete cascade,
-  created_by uuid not null references auth.users (id) on delete restrict,
-  paid_by uuid not null references auth.users (id) on delete restrict,
+  created_by uuid references auth.users (id) on delete set null,
+  paid_by_participant_id uuid not null,
   description text not null,
   amount_minor bigint not null check (amount_minor > 0),
   currency text not null check (currency ~ '^[A-Z]{3}$'),
   incurred_on date not null default current_date,
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (trip_id, id)
 );
 
 create table public.expense_splits (
-  expense_id uuid not null references public.expenses (id) on delete cascade,
-  user_id uuid not null references auth.users (id) on delete restrict,
+  trip_id uuid not null references public.trips (id) on delete cascade,
+  expense_id uuid not null,
+  participant_id uuid not null,
   share_minor bigint not null check (share_minor >= 0),
   settled_at timestamptz,
-  primary key (expense_id, user_id)
+  primary key (expense_id, participant_id)
 );
+
+alter table public.travel_segments add constraint travel_participant_same_trip foreign key (trip_id, participant_id) references public.trip_participants (trip_id, id) on delete restrict;
+alter table public.trip_clips add constraint clips_place_same_trip foreign key (trip_id, place_id) references public.places (trip_id, id) on delete set null (place_id);
+alter table public.itinerary_items add constraint itinerary_place_same_trip foreign key (trip_id, place_id) references public.places (trip_id, id) on delete set null (place_id);
+alter table public.expenses add constraint expense_payer_same_trip foreign key (trip_id, paid_by_participant_id) references public.trip_participants (trip_id, id) on delete restrict;
+alter table public.expense_splits add constraint split_expense_same_trip foreign key (trip_id, expense_id) references public.expenses (trip_id, id) on delete cascade;
+alter table public.expense_splits add constraint split_participant_same_trip foreign key (trip_id, participant_id) references public.trip_participants (trip_id, id) on delete restrict;
 
 create index trip_members_user_id_idx on public.trip_members (user_id);
 create index trip_invitations_trip_id_idx on public.trip_invitations (trip_id);
@@ -192,6 +213,8 @@ create trigger profiles_set_updated_at before update on public.profiles
 for each row execute function public.set_updated_at();
 create trigger trips_set_updated_at before update on public.trips
 for each row execute function public.set_updated_at();
+create trigger trip_participants_set_updated_at before update on public.trip_participants
+for each row execute function public.set_updated_at();
 create trigger travel_segments_set_updated_at before update on public.travel_segments
 for each row execute function public.set_updated_at();
 create trigger accommodations_set_updated_at before update on public.accommodations
@@ -208,10 +231,17 @@ for each row execute function public.set_updated_at();
 create or replace function public.prevent_created_by_change()
 returns trigger
 language plpgsql
+security definer
 set search_path = ''
 as $$
 begin
-  if new.created_by <> old.created_by then
+  if new.created_by is distinct from old.created_by
+    and not (
+      old.created_by is not null
+      and new.created_by is null
+      and not exists (select 1 from auth.users where id = old.created_by)
+    )
+  then
     raise exception 'created_by is immutable';
   end if;
   return new;
@@ -230,6 +260,69 @@ create trigger itinerary_items_created_by_immutable before update on public.itin
 for each row execute function public.prevent_created_by_change();
 create trigger expenses_created_by_immutable before update on public.expenses
 for each row execute function public.prevent_created_by_change();
+
+create or replace function public.prevent_trip_identity_change()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.trip_id is distinct from old.trip_id then raise exception 'trip_id is immutable'; end if;
+  return new;
+end; $$;
+
+create trigger travel_trip_immutable before update on public.travel_segments for each row execute function public.prevent_trip_identity_change();
+create trigger accommodations_trip_immutable before update on public.accommodations for each row execute function public.prevent_trip_identity_change();
+create trigger places_trip_immutable before update on public.places for each row execute function public.prevent_trip_identity_change();
+create trigger clips_trip_immutable before update on public.trip_clips for each row execute function public.prevent_trip_identity_change();
+create trigger itinerary_trip_immutable before update on public.itinerary_items for each row execute function public.prevent_trip_identity_change();
+create trigger expenses_trip_immutable before update on public.expenses for each row execute function public.prevent_trip_identity_change();
+create trigger participants_trip_immutable before update on public.trip_participants for each row execute function public.prevent_trip_identity_change();
+
+create or replace function public.prevent_participant_user_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.user_id is distinct from old.user_id
+    and not (
+      old.user_id is not null
+      and new.user_id is null
+      and not exists (select 1 from auth.users where id = old.user_id)
+    )
+  then
+    raise exception 'participant user_id is immutable';
+  end if;
+  return new;
+end;
+$$;
+create trigger participants_user_immutable before update on public.trip_participants
+for each row execute function public.prevent_participant_user_change();
+
+create or replace function public.prevent_expense_split_identity_change()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.trip_id is distinct from old.trip_id
+    or new.expense_id is distinct from old.expense_id
+    or new.participant_id is distinct from old.participant_id
+  then raise exception 'expense split identity is immutable'; end if;
+  return new;
+end; $$;
+create trigger expense_splits_identity_immutable before update on public.expense_splits
+for each row execute function public.prevent_expense_split_identity_change();
+
+create or replace function public.validate_iana_time_zone()
+returns trigger language plpgsql stable set search_path = '' as $$
+begin
+  if not exists (select 1 from pg_catalog.pg_timezone_names where name = new.time_zone) then raise exception 'Invalid IANA time zone: %', new.time_zone; end if;
+  return new;
+end; $$;
+create trigger accommodations_validate_timezone before insert or update of time_zone on public.accommodations for each row execute function public.validate_iana_time_zone();
+create trigger itinerary_validate_timezone before insert or update of time_zone on public.itinerary_items for each row execute function public.validate_iana_time_zone();
+create or replace function public.validate_travel_time_zones() returns trigger language plpgsql stable set search_path = '' as $$
+begin
+ if not exists (select 1 from pg_catalog.pg_timezone_names where name = new.departure_time_zone) or not exists (select 1 from pg_catalog.pg_timezone_names where name = new.arrival_time_zone) then raise exception 'Invalid IANA time zone'; end if; return new;
+end; $$;
+create trigger travel_validate_timezones before insert or update of departure_time_zone, arrival_time_zone on public.travel_segments for each row execute function public.validate_travel_time_zones();
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -260,8 +353,9 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.trip_members (trip_id, user_id, role)
-  values (new.id, new.owner_id, 'organizer');
+  insert into public.trip_members (trip_id, user_id, role) values (new.id, new.owner_id, 'organizer');
+  insert into public.trip_participants (trip_id, user_id, display_name)
+  values (new.id, new.owner_id, coalesce((select display_name from public.profiles where id = new.owner_id), 'Trip owner'));
   return new;
 end;
 $$;
@@ -276,7 +370,7 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.owner_id <> old.owner_id then
+  if new.owner_id is distinct from old.owner_id then
     raise exception 'Trip ownership cannot be reassigned directly';
   end if;
   return new;
@@ -286,6 +380,15 @@ $$;
 create trigger trips_prevent_owner_change
 before update on public.trips
 for each row execute function public.prevent_trip_owner_change();
+
+create or replace function public.protect_owner_membership() returns trigger language plpgsql set search_path = '' as $$
+declare v_owner uuid; begin
+ select owner_id into v_owner from public.trips where id = old.trip_id;
+ if tg_op = 'UPDATE' and (new.trip_id is distinct from old.trip_id or new.user_id is distinct from old.user_id) then raise exception 'Membership identity is immutable'; end if;
+ if old.user_id = v_owner and (tg_op = 'DELETE' or new.role is distinct from 'organizer'::public.trip_role) then raise exception 'Trip owner membership must remain organizer'; end if;
+ return case when tg_op = 'DELETE' then old else new end;
+end; $$;
+create trigger trip_members_protect_owner before update or delete on public.trip_members for each row execute function public.protect_owner_membership();
 
 create or replace function public.is_trip_member(p_trip_id uuid)
 returns boolean
@@ -314,20 +417,6 @@ as $$
     where trip_id = p_trip_id
       and user_id = auth.uid()
       and role in ('organizer', 'editor')
-  );
-$$;
-
-create or replace function public.is_user_trip_member(p_trip_id uuid, p_user_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1
-    from public.trip_members
-    where trip_id = p_trip_id and user_id = p_user_id
   );
 $$;
 
@@ -402,25 +491,7 @@ as $$
     select 1
     from public.expenses e
     where e.id = p_expense_id
-      and (e.created_by = auth.uid() or public.can_edit_trip(e.trip_id))
-  );
-$$;
-
-create or replace function public.is_expense_participant(
-  p_expense_id uuid,
-  p_user_id uuid
-)
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1
-    from public.expenses e
-    join public.trip_members m on m.trip_id = e.trip_id
-    where e.id = p_expense_id and m.user_id = p_user_id
+      and ((e.created_by = auth.uid() and public.can_contribute_trip(e.trip_id)) or public.can_edit_trip(e.trip_id))
   );
 $$;
 
@@ -485,8 +556,8 @@ set search_path = ''
 as $$
 declare
   v_invitation public.trip_invitations%rowtype;
-  v_inserted integer;
   v_email text;
+  v_confirmed_at timestamptz;
 begin
   if auth.uid() is null then
     raise exception 'Authentication is required';
@@ -504,21 +575,29 @@ begin
     raise exception 'Invitation is invalid, expired, revoked, or fully used';
   end if;
 
-  v_email := lower(coalesce(auth.jwt() ->> 'email', ''));
+  select lower(email), email_confirmed_at into v_email, v_confirmed_at from auth.users where id = auth.uid() and not is_anonymous;
+  if v_email is null or v_confirmed_at is null then raise exception 'A confirmed, non-anonymous account is required'; end if;
   if v_invitation.invited_email is not null and v_invitation.invited_email <> v_email then
     raise exception 'Invitation is for a different email address';
   end if;
 
-  insert into public.trip_members (trip_id, user_id, role, invited_by)
-  values (v_invitation.trip_id, auth.uid(), v_invitation.role, v_invitation.invited_by)
-  on conflict (trip_id, user_id) do nothing;
-
-  get diagnostics v_inserted = row_count;
-  if v_inserted = 1 then
-    update public.trip_invitations
-    set use_count = use_count + 1
-    where id = v_invitation.id;
+  if exists (
+    select 1 from public.trip_members
+    where trip_id = v_invitation.trip_id and user_id = auth.uid()
+  ) then
+    raise exception 'Already a trip member';
   end if;
+
+  insert into public.trip_members (trip_id, user_id, role, invited_by)
+  values (v_invitation.trip_id, auth.uid(), v_invitation.role, v_invitation.invited_by);
+
+  insert into public.trip_participants (trip_id, user_id, display_name)
+  values (v_invitation.trip_id, auth.uid(), coalesce((select display_name from public.profiles where id = auth.uid()), v_email))
+  on conflict (trip_id, user_id) where user_id is not null do update set status = 'active', removed_at = null;
+
+  update public.trip_invitations
+  set use_count = use_count + 1
+  where id = v_invitation.id;
 
   return v_invitation.trip_id;
 end;
@@ -551,6 +630,7 @@ alter table public.profiles enable row level security;
 alter table public.trips enable row level security;
 alter table public.trip_members enable row level security;
 alter table public.trip_invitations enable row level security;
+alter table public.trip_participants enable row level security;
 alter table public.travel_segments enable row level security;
 alter table public.accommodations enable row level security;
 alter table public.places enable row level security;
@@ -567,13 +647,13 @@ for update to authenticated
 using (id = auth.uid()) with check (id = auth.uid());
 
 create policy trips_select_members on public.trips
-for select to authenticated using (public.is_trip_member(id));
+for select to authenticated using (owner_id = auth.uid() or public.is_trip_member(id));
 create policy trips_insert_owner on public.trips
 for insert to authenticated with check (owner_id = auth.uid());
 create policy trips_update_editors on public.trips
 for update to authenticated using (public.can_edit_trip(id)) with check (public.can_edit_trip(id));
-create policy trips_delete_organizers on public.trips
-for delete to authenticated using (public.is_trip_organizer(id));
+create policy trips_delete_owner on public.trips
+for delete to authenticated using (owner_id = auth.uid());
 
 create policy trip_members_select_members on public.trip_members
 for select to authenticated using (public.is_trip_member(trip_id));
@@ -583,6 +663,10 @@ with check (public.is_trip_organizer(trip_id));
 create policy trip_members_delete_organizers on public.trip_members
 for delete to authenticated using (public.is_trip_organizer(trip_id) and user_id <> auth.uid());
 
+create policy participants_select_members on public.trip_participants for select to authenticated using (public.is_trip_member(trip_id));
+create policy participants_insert_editors on public.trip_participants for insert to authenticated with check (public.can_edit_trip(trip_id));
+create policy participants_update_editors on public.trip_participants for update to authenticated using (public.can_edit_trip(trip_id)) with check (public.can_edit_trip(trip_id));
+
 create policy invitations_select_organizers on public.trip_invitations
 for select to authenticated using (public.is_trip_organizer(trip_id));
 create policy invitations_delete_organizers on public.trip_invitations
@@ -591,100 +675,84 @@ for delete to authenticated using (public.is_trip_organizer(trip_id));
 create policy travel_select_members on public.travel_segments
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy travel_insert_contributors on public.travel_segments
-for insert to authenticated with check (
-  public.can_contribute_trip(trip_id)
-  and created_by = auth.uid()
-  and (
-    traveler_user_id is null
-    or traveler_user_id = auth.uid()
-    or public.can_edit_trip(trip_id)
-  )
-  and (traveler_user_id is null or public.is_user_trip_member(trip_id, traveler_user_id))
-);
+for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy travel_update_owner_or_editors on public.travel_segments
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (
-  (created_by = auth.uid() or public.can_edit_trip(trip_id))
-  and (traveler_user_id is null or traveler_user_id = auth.uid() or public.can_edit_trip(trip_id))
-  and (traveler_user_id is null or public.is_user_trip_member(trip_id, traveler_user_id))
-);
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy travel_delete_owner_or_editors on public.travel_segments
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy accommodations_select_members on public.accommodations
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy accommodations_insert_contributors on public.accommodations
 for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy accommodations_update_owner_or_editors on public.accommodations
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy accommodations_delete_owner_or_editors on public.accommodations
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy places_select_members on public.places
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy places_insert_contributors on public.places
 for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy places_update_owner_or_editors on public.places
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy places_delete_owner_or_editors on public.places
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy clips_select_members on public.trip_clips
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy clips_insert_contributors on public.trip_clips
 for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy clips_update_owner_or_editors on public.trip_clips
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy clips_delete_owner_or_editors on public.trip_clips
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy itinerary_select_members on public.itinerary_items
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy itinerary_insert_contributors on public.itinerary_items
 for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy itinerary_update_owner_or_editors on public.itinerary_items
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy itinerary_delete_owner_or_editors on public.itinerary_items
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy expenses_select_members on public.expenses
 for select to authenticated using (public.is_trip_member(trip_id));
 create policy expenses_insert_contributors on public.expenses
-for insert to authenticated with check (
-  public.can_contribute_trip(trip_id)
-  and created_by = auth.uid()
-  and public.is_user_trip_member(trip_id, paid_by)
-);
+for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
 create policy expenses_update_owner_or_editors on public.expenses
-for update to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id))
-with check (
-  (created_by = auth.uid() or public.can_edit_trip(trip_id))
-  and public.is_user_trip_member(trip_id, paid_by)
-);
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy expenses_delete_owner_or_editors on public.expenses
-for delete to authenticated using (created_by = auth.uid() or public.can_edit_trip(trip_id));
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy expense_splits_select_members on public.expense_splits
 for select to authenticated using (public.is_expense_trip_member(expense_id));
 create policy expense_splits_insert_managers on public.expense_splits
 for insert to authenticated with check (
   public.can_manage_expense(expense_id)
-  and public.is_expense_participant(expense_id, user_id)
 );
 create policy expense_splits_update_managers on public.expense_splits
 for update to authenticated using (public.can_manage_expense(expense_id))
 with check (
   public.can_manage_expense(expense_id)
-  and public.is_expense_participant(expense_id, user_id)
 );
 create policy expense_splits_delete_managers on public.expense_splits
 for delete to authenticated using (public.can_manage_expense(expense_id));
 
-revoke all on all tables in schema public from anon;
+revoke all on schema public from anon;
+revoke all on all tables in schema public from public, anon;
+revoke all on all functions in schema public from public, anon;
+revoke all on all sequences in schema public from public, anon;
+alter default privileges in schema public revoke all on tables from public, anon;
+alter default privileges in schema public revoke all on functions from public, anon;
+alter default privileges in schema public revoke all on sequences from public, anon;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 
 revoke all on function public.handle_new_user() from public, anon, authenticated;
@@ -692,25 +760,27 @@ revoke all on function public.handle_new_trip() from public, anon, authenticated
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.prevent_trip_owner_change() from public, anon, authenticated;
 revoke all on function public.prevent_created_by_change() from public, anon, authenticated;
+revoke all on function public.prevent_trip_identity_change() from public, anon, authenticated;
+revoke all on function public.prevent_participant_user_change() from public, anon, authenticated;
+revoke all on function public.prevent_expense_split_identity_change() from public, anon, authenticated;
+revoke all on function public.protect_owner_membership() from public, anon, authenticated;
+revoke all on function public.validate_iana_time_zone() from public, anon, authenticated;
+revoke all on function public.validate_travel_time_zones() from public, anon, authenticated;
 
 revoke all on function public.is_trip_member(uuid) from public, anon;
 revoke all on function public.can_edit_trip(uuid) from public, anon;
-revoke all on function public.is_user_trip_member(uuid, uuid) from public, anon;
 revoke all on function public.can_contribute_trip(uuid) from public, anon;
 revoke all on function public.is_trip_organizer(uuid) from public, anon;
 revoke all on function public.shares_trip_with(uuid) from public, anon;
 revoke all on function public.is_expense_trip_member(uuid) from public, anon;
 revoke all on function public.can_manage_expense(uuid) from public, anon;
-revoke all on function public.is_expense_participant(uuid, uuid) from public, anon;
 grant execute on function public.is_trip_member(uuid) to authenticated;
 grant execute on function public.can_edit_trip(uuid) to authenticated;
-grant execute on function public.is_user_trip_member(uuid, uuid) to authenticated;
 grant execute on function public.can_contribute_trip(uuid) to authenticated;
 grant execute on function public.is_trip_organizer(uuid) to authenticated;
 grant execute on function public.shares_trip_with(uuid) to authenticated;
 grant execute on function public.is_expense_trip_member(uuid) to authenticated;
 grant execute on function public.can_manage_expense(uuid) to authenticated;
-grant execute on function public.is_expense_participant(uuid, uuid) to authenticated;
 
 revoke all on function public.create_trip_invitation(uuid, public.trip_role, text, interval, integer)
 from public, anon;
