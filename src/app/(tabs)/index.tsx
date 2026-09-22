@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAuth } from '@/auth/AuthProvider';
 import {
   Avatar,
   Card,
@@ -14,10 +16,58 @@ import {
   SectionTitle,
 } from '@/components/design';
 import { theme } from '@/constants/theme';
+import { listTrips, LiveTrip } from '@/data/live';
 import { previewTrip } from '@/data/preview';
+
+function formatDateRange(trip: LiveTrip): string {
+  if (!trip.startDate) return 'Dates to be added';
+  const format = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+      year: 'numeric',
+    }).format(new Date(`${value}T00:00:00Z`));
+  if (!trip.endDate || trip.endDate === trip.startDate) return format(trip.startDate);
+  return `${format(trip.startDate)} – ${format(trip.endDate)}`;
+}
+
+function getDaysUntil(startDate: string | null): number | null {
+  if (!startDate) return null;
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Math.max(0, Math.ceil((Date.parse(`${startDate}T00:00:00Z`) - todayUtc) / 86_400_000));
+}
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [liveTrip, setLiveTrip] = useState<LiveTrip | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      void Promise.resolve().then(() => setLiveTrip(null));
+      return;
+    }
+
+    let isMounted = true;
+    void listTrips()
+      .then((trips) => {
+        if (isMounted) setLiveTrip(trips[0] ?? null);
+      })
+      .catch(() => {
+        if (isMounted) setLiveTrip(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  const tripId = liveTrip?.id ?? previewTrip.id;
+  const tripTitle = liveTrip?.title ?? previewTrip.title;
+  const tripLocation = liveTrip?.location ?? previewTrip.location;
+  const tripDateRange = liveTrip ? formatDateRange(liveTrip) : previewTrip.dateRange;
+  const countdown = liveTrip ? getDaysUntil(liveTrip.startDate) : previewTrip.daysUntil;
 
   return (
     <Screen>
@@ -26,7 +76,7 @@ export default function HomeScreen() {
           <Text style={styles.wordmark}>wanderly</Text>
           <Text style={styles.tagline}>TRIPS, TOGETHER</Text>
         </View>
-        <PreviewNotice />
+        <PreviewNotice label={liveTrip ? 'LIVE WORKSPACE' : 'PRODUCT PREVIEW'} />
       </View>
 
       <View style={styles.intro}>
@@ -36,44 +86,46 @@ export default function HomeScreen() {
 
       <Pressable
         accessibilityRole="button"
-        onPress={() => router.push(`/trips/${previewTrip.id}`)}
+        onPress={() => router.push(`/trips/${tripId}`)}
         style={({ pressed }) => [styles.hero, pressed && styles.pressed]}>
         <View style={styles.heroGlow} />
         <View style={styles.heroTop}>
-          <Pill tone="white">NEXT TRIP · {previewTrip.daysUntil} DAYS</Pill>
+          <Pill tone="white">
+            {countdown === null ? 'NEXT TRIP · DATES PENDING' : `NEXT TRIP · ${countdown} DAYS`}
+          </Pill>
           <MaterialCommunityIcons color={theme.colors.white} name="arrow-top-right" size={22} />
         </View>
         <View style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>{previewTrip.title}</Text>
-          <Text style={styles.heroLocation}>{previewTrip.location}</Text>
-          <Text style={styles.heroDates}>{previewTrip.dateRange}</Text>
+          <Text style={styles.heroTitle}>{tripTitle}</Text>
+          <Text style={styles.heroLocation}>{tripLocation}</Text>
+          <Text style={styles.heroDates}>{tripDateRange}</Text>
         </View>
         <View style={styles.heroFooter}>
           <View style={styles.avatarRow}>
             <Avatar initials="DM" />
-            <Avatar initials="CL" offset />
-            <Avatar initials="MY" offset />
-            <Avatar initials="+3" offset />
+            <Avatar initials="+2" offset />
           </View>
-          <Text style={styles.heroPeople}>{previewTrip.travelerCount} travelers</Text>
+          <Text style={styles.heroPeople}>
+            {liveTrip ? 'Private pilot' : `${previewTrip.travelerCount} travelers`}
+          </Text>
         </View>
       </Pressable>
 
       <View style={styles.statsRow}>
         <Card style={styles.statCard}>
           <RoundIcon name="airplane-landing" />
-          <Text style={styles.statValue}>9:40 AM</Text>
-          <Text style={styles.statLabel}>First arrival</Text>
+          <Text style={styles.statValue}>Add travel</Text>
+          <Text style={styles.statLabel}>Arrival and return</Text>
         </Card>
         <Card style={styles.statCard}>
-          <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="home-city-outline" />
-          <Text style={styles.statValue}>Casa Oliva</Text>
-          <Text style={styles.statLabel}>Stay confirmed</Text>
+          <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
+          <Text style={styles.statValue}>Game tickets</Text>
+          <Text style={styles.statLabel}>Needs a link</Text>
         </Card>
       </View>
 
       <View style={styles.section}>
-        <SectionTitle action="All arrivals">Who lands when</SectionTitle>
+        <SectionTitle action="Add travel">Who arrives when</SectionTitle>
         <Card style={styles.arrivalCard}>
           {previewTrip.arrivals.map((arrival, index) => (
             <View
@@ -86,7 +138,9 @@ export default function HomeScreen() {
               </View>
               <View style={styles.arrivalTime}>
                 <Text style={styles.rowTitle}>{arrival.arrivalTime}</Text>
-                <Text style={styles.statusText}>{arrival.status === 'on-time' ? 'On time' : 'Later'}</Text>
+                <Text style={styles.statusText}>
+                  {arrival.status === 'on-time' ? 'On time' : arrival.status === 'later' ? 'Later' : 'Add details'}
+                </Text>
               </View>
             </View>
           ))}
@@ -94,7 +148,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <SectionTitle action="Full itinerary">Arrival day</SectionTitle>
+        <SectionTitle action="Full itinerary">Columbia plan</SectionTitle>
         <Card>
           {previewTrip.itinerary.map((item, index) => (
             <View key={item.id} style={styles.planRow}>
@@ -110,7 +164,9 @@ export default function HomeScreen() {
                     ? 'silverware-fork-knife'
                     : item.category === 'stay'
                       ? 'bed-king-outline'
-                      : 'airplane'
+                      : item.category === 'activity'
+                        ? 'stadium-outline'
+                        : 'airplane'
                 }
                 size={18}
               />
@@ -127,7 +183,7 @@ export default function HomeScreen() {
         <RoundIcon backgroundColor="rgba(255,255,255,0.13)" color={theme.colors.white} name="creation-outline" />
         <View style={styles.flex}>
           <Text style={styles.assistantTitle}>Ask Wanderly</Text>
-          <Text style={styles.assistantCopy}>“When does Clay arrive in Rome?”</Text>
+          <Text style={styles.assistantCopy}>“Where are the game tickets?”</Text>
         </View>
         <Pill tone="white">PHASE 3</Pill>
       </View>

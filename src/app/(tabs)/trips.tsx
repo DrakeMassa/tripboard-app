@@ -1,13 +1,88 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Card, Eyebrow, Heading, Pill, PreviewNotice, Screen } from '@/components/design';
 import { theme } from '@/constants/theme';
+import { createColumbiaPilot, listTrips, LiveTrip } from '@/data/live';
 import { previewTrip } from '@/data/preview';
+
+function formatDateRange(startDate: string | null, endDate: string | null): string {
+  if (!startDate) return 'Dates to be added';
+
+  const format = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+      year: 'numeric',
+    }).format(new Date(`${value}T00:00:00Z`));
+
+  if (!endDate || endDate === startDate) return format(startDate);
+  return `${format(startDate)} – ${format(endDate)}`;
+}
+
+function daysUntil(startDate: string | null): number | null {
+  if (!startDate) return null;
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  return Math.max(0, Math.ceil((start - todayUtc) / 86_400_000));
+}
 
 export default function TripsScreen() {
   const router = useRouter();
+  const { isLoading: isAuthLoading, user } = useAuth();
+  const [liveTrips, setLiveTrips] = useState<LiveTrip[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshTrips = useCallback(async () => {
+    if (!user) {
+      setLiveTrips([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      setLiveTrips(await listTrips());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load trips.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void Promise.resolve().then(refreshTrips);
+  }, [refreshTrips]);
+
+  const handlePrimaryAction = async () => {
+    if (!user) {
+      router.push('/profile');
+      return;
+    }
+    if (liveTrips.length > 0 || isCreating) return;
+
+    setIsCreating(true);
+    setError(null);
+    try {
+      const trip = await createColumbiaPilot();
+      setLiveTrips([trip]);
+      router.push(`/trips/${trip.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not create the pilot trip.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const isLive = Boolean(user);
+  const trips = isLive ? liveTrips : [];
 
   return (
     <Screen>
@@ -16,38 +91,105 @@ export default function TripsScreen() {
           <Eyebrow>YOUR TRIPS</Eyebrow>
           <Heading>Where to next?</Heading>
         </View>
-        <PreviewNotice />
+        <PreviewNotice label={isLive ? 'LIVE WORKSPACE' : 'PRODUCT PREVIEW'} />
       </View>
 
-      <ActionButton icon="plus" label="Create a trip" />
+      <ActionButton
+        icon={user ? 'plus' : 'login'}
+        label={
+          isAuthLoading
+            ? 'Checking sign-in…'
+            : !user
+              ? 'Sign in to start the pilot'
+              : liveTrips.length > 0
+                ? 'Columbia pilot created'
+                : isCreating
+                  ? 'Creating pilot…'
+                  : 'Create Columbia pilot'
+        }
+        onPress={isAuthLoading ? undefined : () => void handlePrimaryAction()}
+        secondary={Boolean(user && liveTrips.length > 0)}
+      />
+
+      {error ? (
+        <Card style={styles.errorCard}>
+          <MaterialCommunityIcons color={theme.colors.danger} name="alert-circle-outline" size={22} />
+          <View style={styles.errorCopy}>
+            <Text style={styles.errorTitle}>Live data is not ready yet</Text>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        </Card>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>UPCOMING</Text>
-        <Pressable
-          onPress={() => router.push(`/trips/${previewTrip.id}`)}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <Card style={styles.tripCard}>
-            <View style={styles.cover}>
-              <View style={styles.coverOrb} />
-              <Pill tone="white">{previewTrip.daysUntil} DAYS AWAY</Pill>
-              <MaterialCommunityIcons color={theme.colors.sage} name="map-marker-radius-outline" size={72} />
-            </View>
-            <View style={styles.tripCopy}>
-              <Text style={styles.tripTitle}>{previewTrip.title}</Text>
-              <Text style={styles.tripLocation}>{previewTrip.location}</Text>
-              <View style={styles.metaRow}>
-                <View style={styles.metaItem}>
-                  <MaterialCommunityIcons color={theme.colors.muted} name="calendar-blank-outline" size={16} />
-                  <Text style={styles.metaText}>{previewTrip.dateRange}</Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <MaterialCommunityIcons color={theme.colors.muted} name="account-multiple-outline" size={16} />
-                  <Text style={styles.metaText}>{previewTrip.travelerCount}</Text>
+        {isLive && isLoading ? <ActivityIndicator color={theme.colors.forest} /> : null}
+        {!isLive ? (
+          <Pressable
+            onPress={() => router.push(`/trips/${previewTrip.id}`)}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Card style={styles.tripCard}>
+              <View style={styles.cover}>
+                <View style={styles.coverOrb} />
+                <Pill tone="white">{previewTrip.daysUntil} DAYS AWAY</Pill>
+                <MaterialCommunityIcons color={theme.colors.sage} name="map-marker-radius-outline" size={72} />
+              </View>
+              <View style={styles.tripCopy}>
+                <Text style={styles.tripTitle}>{previewTrip.title}</Text>
+                <Text style={styles.tripLocation}>{previewTrip.location}</Text>
+                <View style={styles.metaRow}>
+                  <View style={styles.metaItem}>
+                    <MaterialCommunityIcons color={theme.colors.muted} name="calendar-blank-outline" size={16} />
+                    <Text style={styles.metaText}>{previewTrip.dateRange}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <MaterialCommunityIcons color={theme.colors.muted} name="account-multiple-outline" size={16} />
+                    <Text style={styles.metaText}>{previewTrip.travelerCount}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            </Card>
+          </Pressable>
+        ) : null}
+        {trips.map((trip) => {
+          const countdown = daysUntil(trip.startDate);
+          return (
+            <Pressable
+              key={trip.id}
+              onPress={() => router.push(`/trips/${trip.id}`)}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <Card style={styles.tripCard}>
+                <View style={styles.cover}>
+                  <View style={styles.coverOrb} />
+                  <Pill tone="white">
+                    {countdown === null ? 'DATES PENDING' : `${countdown} DAYS AWAY`}
+                  </Pill>
+                  <MaterialCommunityIcons color={theme.colors.sage} name="map-marker-radius-outline" size={72} />
+                </View>
+                <View style={styles.tripCopy}>
+                  <Text style={styles.tripTitle}>{trip.title}</Text>
+                  <Text style={styles.tripLocation}>{trip.location ?? 'Location to be added'}</Text>
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaItem}>
+                      <MaterialCommunityIcons color={theme.colors.muted} name="calendar-blank-outline" size={16} />
+                      <Text style={styles.metaText}>{formatDateRange(trip.startDate, trip.endDate)}</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <MaterialCommunityIcons color={theme.colors.muted} name="lock-outline" size={16} />
+                      <Text style={styles.metaText}>Private pilot</Text>
+                    </View>
+                  </View>
+                </View>
+              </Card>
+            </Pressable>
+          );
+        })}
+        {isLive && !isLoading && trips.length === 0 && !error ? (
+          <Card style={styles.emptyLiveCard}>
+            <Text style={styles.emptyTitle}>Your live workspace is empty</Text>
+            <Text style={styles.emptyText}>Create the Columbia pilot above to begin adding real trip details.</Text>
           </Card>
-        </Pressable>
+        ) : null}
       </View>
 
       <Card style={styles.emptyCard}>
@@ -79,5 +221,10 @@ const styles = StyleSheet.create({
   emptyCopy: { flex: 1 },
   emptyTitle: { color: theme.colors.ink, fontSize: 15, fontWeight: '800' },
   emptyText: { color: theme.colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
+  emptyLiveCard: { backgroundColor: theme.colors.sage },
+  errorCard: { alignItems: 'flex-start', backgroundColor: theme.colors.coralSoft, flexDirection: 'row', gap: theme.spacing.md },
+  errorCopy: { flex: 1 },
+  errorTitle: { color: theme.colors.danger, fontSize: 14, fontWeight: '800' },
+  errorText: { color: theme.colors.ink, fontSize: 12, lineHeight: 17, marginTop: 3 },
   pressed: { opacity: 0.78 },
 });

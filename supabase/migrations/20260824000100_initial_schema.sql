@@ -9,6 +9,7 @@ create type public.clip_source as enum ('tiktok', 'instagram', 'youtube', 'web',
 create type public.clip_status as enum ('pending', 'ready', 'failed');
 create type public.place_category as enum ('restaurant', 'attraction', 'stay', 'transit', 'shopping', 'other');
 create type public.participant_status as enum ('active', 'removed');
+create type public.resource_kind as enum ('ticket', 'confirmation', 'parking_pass', 'reservation', 'document', 'photo_album', 'link', 'other');
 
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -23,6 +24,7 @@ create table public.trips (
   owner_id uuid not null references auth.users (id) on delete restrict,
   title text not null check (char_length(title) between 1 and 120),
   description text,
+  location text check (location is null or (nullif(trim(location), '') is not null and char_length(location) <= 160)),
   start_date date,
   end_date date,
   cover_url text,
@@ -155,7 +157,27 @@ create table public.itinerary_items (
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (trip_id, id),
   constraint itinerary_time_order check (ends_at is null or ends_at >= starts_at)
+);
+
+create table public.trip_resources (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references public.trips (id) on delete cascade,
+  itinerary_item_id uuid,
+  created_by uuid references auth.users (id) on delete set null,
+  kind public.resource_kind not null default 'link',
+  title text not null check (nullif(trim(title), '') is not null and char_length(title) <= 160),
+  provider text,
+  external_url text,
+  storage_path text,
+  details text,
+  metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (trip_id, id),
+  constraint resource_external_url_https check (external_url is null or external_url ~* '^https://[^[:space:]]+$'),
+  constraint resource_storage_path_nonempty check (storage_path is null or nullif(trim(storage_path), '') is not null)
 );
 
 create table public.expenses (
@@ -185,6 +207,7 @@ create table public.expense_splits (
 alter table public.travel_segments add constraint travel_participant_same_trip foreign key (trip_id, participant_id) references public.trip_participants (trip_id, id) on delete restrict;
 alter table public.trip_clips add constraint clips_place_same_trip foreign key (trip_id, place_id) references public.places (trip_id, id) on delete set null (place_id);
 alter table public.itinerary_items add constraint itinerary_place_same_trip foreign key (trip_id, place_id) references public.places (trip_id, id) on delete set null (place_id);
+alter table public.trip_resources add constraint resource_itinerary_same_trip foreign key (trip_id, itinerary_item_id) references public.itinerary_items (trip_id, id) on delete set null (itinerary_item_id);
 alter table public.expenses add constraint expense_payer_same_trip foreign key (trip_id, paid_by_participant_id) references public.trip_participants (trip_id, id) on delete restrict;
 alter table public.expense_splits add constraint split_expense_same_trip foreign key (trip_id, expense_id) references public.expenses (trip_id, id) on delete cascade;
 alter table public.expense_splits add constraint split_participant_same_trip foreign key (trip_id, participant_id) references public.trip_participants (trip_id, id) on delete restrict;
@@ -196,6 +219,8 @@ create index accommodations_trip_checkin_idx on public.accommodations (trip_id, 
 create index places_trip_category_idx on public.places (trip_id, category);
 create index trip_clips_trip_created_idx on public.trip_clips (trip_id, created_at desc);
 create index itinerary_items_trip_start_idx on public.itinerary_items (trip_id, starts_at);
+create index trip_resources_trip_created_idx on public.trip_resources (trip_id, created_at desc);
+create index trip_resources_itinerary_idx on public.trip_resources (trip_id, itinerary_item_id) where itinerary_item_id is not null;
 create index expenses_trip_date_idx on public.expenses (trip_id, incurred_on desc);
 
 create or replace function public.set_updated_at()
@@ -224,6 +249,8 @@ for each row execute function public.set_updated_at();
 create trigger trip_clips_set_updated_at before update on public.trip_clips
 for each row execute function public.set_updated_at();
 create trigger itinerary_items_set_updated_at before update on public.itinerary_items
+for each row execute function public.set_updated_at();
+create trigger trip_resources_set_updated_at before update on public.trip_resources
 for each row execute function public.set_updated_at();
 create trigger expenses_set_updated_at before update on public.expenses
 for each row execute function public.set_updated_at();
@@ -258,6 +285,8 @@ create trigger trip_clips_created_by_immutable before update on public.trip_clip
 for each row execute function public.prevent_created_by_change();
 create trigger itinerary_items_created_by_immutable before update on public.itinerary_items
 for each row execute function public.prevent_created_by_change();
+create trigger trip_resources_created_by_immutable before update on public.trip_resources
+for each row execute function public.prevent_created_by_change();
 create trigger expenses_created_by_immutable before update on public.expenses
 for each row execute function public.prevent_created_by_change();
 
@@ -273,6 +302,7 @@ create trigger accommodations_trip_immutable before update on public.accommodati
 create trigger places_trip_immutable before update on public.places for each row execute function public.prevent_trip_identity_change();
 create trigger clips_trip_immutable before update on public.trip_clips for each row execute function public.prevent_trip_identity_change();
 create trigger itinerary_trip_immutable before update on public.itinerary_items for each row execute function public.prevent_trip_identity_change();
+create trigger resources_trip_immutable before update on public.trip_resources for each row execute function public.prevent_trip_identity_change();
 create trigger expenses_trip_immutable before update on public.expenses for each row execute function public.prevent_trip_identity_change();
 create trigger participants_trip_immutable before update on public.trip_participants for each row execute function public.prevent_trip_identity_change();
 
@@ -636,6 +666,7 @@ alter table public.accommodations enable row level security;
 alter table public.places enable row level security;
 alter table public.trip_clips enable row level security;
 alter table public.itinerary_items enable row level security;
+alter table public.trip_resources enable row level security;
 alter table public.expenses enable row level security;
 alter table public.expense_splits enable row level security;
 
@@ -720,6 +751,16 @@ create policy itinerary_update_owner_or_editors on public.itinerary_items
 for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
 with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 create policy itinerary_delete_owner_or_editors on public.itinerary_items
+for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
+
+create policy resources_select_members on public.trip_resources
+for select to authenticated using (public.is_trip_member(trip_id));
+create policy resources_insert_contributors on public.trip_resources
+for insert to authenticated with check (public.can_contribute_trip(trip_id) and created_by = auth.uid());
+create policy resources_update_owner_or_editors on public.trip_resources
+for update to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id))
+with check ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
+create policy resources_delete_owner_or_editors on public.trip_resources
 for delete to authenticated using ((created_by = auth.uid() and public.can_contribute_trip(trip_id)) or public.can_edit_trip(trip_id));
 
 create policy expenses_select_members on public.expenses

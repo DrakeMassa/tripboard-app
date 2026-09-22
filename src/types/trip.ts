@@ -16,6 +16,25 @@ export type ItineraryItem = {
   category: 'travel' | 'food' | 'stay' | 'activity';
 };
 
+export type TripResourceKind =
+  | 'ticket'
+  | 'confirmation'
+  | 'parking_pass'
+  | 'reservation'
+  | 'document'
+  | 'photo_album'
+  | 'link'
+  | 'other';
+
+export type TripResourcePreview = {
+  id: string;
+  itineraryItemId: string | null;
+  kind: TripResourceKind;
+  title: string;
+  detail: string;
+  externalUrl: string | null;
+};
+
 export type TripPreview = {
   id: string;
   title: string;
@@ -26,6 +45,7 @@ export type TripPreview = {
   baseCurrency: string;
   arrivals: TravelerArrival[];
   itinerary: ItineraryItem[];
+  resources: TripResourcePreview[];
 };
 
 export type ClipPreview = {

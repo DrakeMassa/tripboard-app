@@ -44,22 +44,30 @@ insert into public.trip_participants(id,trip_id,user_id,display_name) values
 insert into public.places(id,trip_id,created_by,name) values
  ('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','Authored by viewer'),
  ('30000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','Authored by member');
+insert into public.trip_resources(id,trip_id,created_by,kind,title,external_url) values
+ ('56000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','ticket','Viewer ticket','https://tickets.example/viewer'),
+ ('56000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','photo_album','Member album','https://photos.example/member');
 
 set role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
 with changed as (update public.places set notes='blocked' where id='30000000-0000-0000-0000-000000000001' returning id) select pg_temp.assert_true(count(*)=0,'viewer cannot update authored content') from changed;
 with changed as (delete from public.places where id='30000000-0000-0000-0000-000000000001' returning id) select pg_temp.assert_true(count(*)=0,'viewer cannot delete authored content') from changed;
+with changed as (update public.trip_resources set details='blocked' where id='56000000-0000-0000-0000-000000000003' returning id) select pg_temp.assert_true(count(*)=0,'viewer cannot update authored resource') from changed;
+with changed as (delete from public.trip_resources where id='56000000-0000-0000-0000-000000000003' returning id) select pg_temp.assert_true(count(*)=0,'viewer cannot delete authored resource') from changed;
 reset role;
 
 delete from public.trip_members where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000004';
 set role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',false);
 with changed as (update public.places set notes='blocked removed' where id='30000000-0000-0000-0000-000000000003' returning id) select pg_temp.assert_true(count(*)=0,'removed member cannot update') from changed;
+with changed as (update public.trip_resources set details='blocked removed' where id='56000000-0000-0000-0000-000000000004' returning id) select pg_temp.assert_true(count(*)=0,'removed member cannot update resource') from changed;
+with changed as (delete from public.trip_resources where id='56000000-0000-0000-0000-000000000004' returning id) select pg_temp.assert_true(count(*)=0,'removed member cannot delete resource') from changed;
 reset role;
 
 set role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
 update public.places set notes='editor works' where id='30000000-0000-0000-0000-000000000001';
+update public.trip_resources set details='editor works' where id='56000000-0000-0000-0000-000000000003';
 reset role;
 update public.trip_members set role='organizer' where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000002';
 set role authenticated;
@@ -68,6 +76,7 @@ update public.trip_members set role='member' where trip_id='10000000-0000-0000-0
 reset role;
 select pg_temp.assert_true((select role='member' from public.trip_members where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000003'),'organizer manages non-owner');
 select pg_temp.assert_true((select notes='editor works' from public.places where id='30000000-0000-0000-0000-000000000001'),'editor update');
+select pg_temp.assert_true((select details='editor works' from public.trip_resources where id='56000000-0000-0000-0000-000000000003'),'editor resource update');
 select pg_temp.expect_error($q$delete from public.trip_members where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000001'$q$,'P0001','Trip owner membership must remain organizer');
 select pg_temp.expect_error($q$update public.trip_members set role='viewer' where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000001'$q$,'P0001','Trip owner membership must remain organizer');
 
@@ -79,7 +88,9 @@ select pg_temp.assert_true(exists(select 1 from public.trips where id='10000000-
 
 insert into public.trips(id,owner_id,title) values ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000005','Other trip');
 insert into public.places(id,trip_id,created_by,name) values ('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000005','Other place');
+insert into public.itinerary_items(id,trip_id,created_by,title,starts_at,time_zone) values ('54000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000005','Other plan',now(),'UTC');
 select pg_temp.expect_error($q$insert into public.trip_clips(trip_id,created_by,place_id,source,source_url) values ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002','web','https://example.test')$q$,'23503','clips_place_same_trip');
+select pg_temp.expect_error($q$insert into public.trip_resources(trip_id,itinerary_item_id,created_by,kind,title) values ('10000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','ticket','Wrong trip')$q$,'23503','resource_itinerary_same_trip');
 select pg_temp.expect_error($q$insert into public.expenses(trip_id,created_by,paid_by_participant_id,description,amount_minor,currency) values ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001',(select id from public.trip_participants where trip_id='10000000-0000-0000-0000-000000000002'),'bad',100,'USD')$q$,'23503','expense_payer_same_trip');
 update public.trip_participants set status='removed',removed_at=now() where id='20000000-0000-0000-0000-000000000003';
 set role authenticated;
@@ -130,6 +141,8 @@ select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002'
 select pg_temp.expect_error($q$update public.trip_members set user_id='00000000-0000-0000-0000-000000000012' where trip_id='10000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000003'$q$,'P0001','Membership identity is immutable');
 select pg_temp.expect_error($q$update public.trip_participants set user_id='00000000-0000-0000-0000-000000000012' where id='20000000-0000-0000-0000-000000000003'$q$,'P0001','participant user_id is immutable');
 select pg_temp.expect_error($q$update public.places set created_by=null where id='30000000-0000-0000-0000-000000000001'$q$,'P0001','created_by is immutable');
+select pg_temp.expect_error($q$update public.trip_resources set created_by=null where id='56000000-0000-0000-0000-000000000003'$q$,'P0001','created_by is immutable');
+select pg_temp.expect_error($q$update public.trip_resources set trip_id='10000000-0000-0000-0000-000000000002' where id='56000000-0000-0000-0000-000000000003'$q$,'P0001','trip_id is immutable');
 reset role;
 
 -- Account deletion nulls provenance and participant linkage but preserves history.
@@ -140,15 +153,17 @@ insert into public.accommodations(id,trip_id,created_by,name,time_zone) values (
 insert into public.places(id,trip_id,created_by,name) values ('52000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','Place');
 insert into public.trip_clips(id,trip_id,created_by,source,source_url) values ('53000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','web','https://author.example');
 insert into public.itinerary_items(id,trip_id,created_by,title,starts_at,time_zone) values ('54000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','Plan',now(),'UTC');
+insert into public.trip_resources(id,trip_id,itinerary_item_id,created_by,kind,title,external_url) values ('56000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','ticket','Ticket','https://tickets.example/author');
 insert into public.expenses(id,trip_id,created_by,paid_by_participant_id,description,amount_minor,currency) values ('55000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000011','Expense',100,'USD');
 delete from auth.users where id='00000000-0000-0000-0000-000000000011';
 select pg_temp.assert_true(not exists(select 1 from auth.users where id='00000000-0000-0000-0000-000000000011'),'non-owner account deletion succeeds');
-select pg_temp.assert_true((select bool_and(created_by is null) from (select created_by from public.travel_segments where id='50000000-0000-0000-0000-000000000001' union all select created_by from public.accommodations where id='51000000-0000-0000-0000-000000000001' union all select created_by from public.places where id='52000000-0000-0000-0000-000000000001' union all select created_by from public.trip_clips where id='53000000-0000-0000-0000-000000000001' union all select created_by from public.itinerary_items where id='54000000-0000-0000-0000-000000000001' union all select created_by from public.expenses where id='55000000-0000-0000-0000-000000000001') rows),'all authored rows survive with null provenance');
+select pg_temp.assert_true((select bool_and(created_by is null) from (select created_by from public.travel_segments where id='50000000-0000-0000-0000-000000000001' union all select created_by from public.accommodations where id='51000000-0000-0000-0000-000000000001' union all select created_by from public.places where id='52000000-0000-0000-0000-000000000001' union all select created_by from public.trip_clips where id='53000000-0000-0000-0000-000000000001' union all select created_by from public.itinerary_items where id='54000000-0000-0000-0000-000000000001' union all select created_by from public.trip_resources where id='56000000-0000-0000-0000-000000000001' union all select created_by from public.expenses where id='55000000-0000-0000-0000-000000000001') rows),'all authored rows survive with null provenance');
 select pg_temp.assert_true((select user_id is null from public.trip_participants where id='20000000-0000-0000-0000-000000000011'),'account deletion nulls participant link');
 
 -- Anonymous receives neither table access nor helper execution despite bootstrap grants.
 set role anon;
 select pg_temp.expect_error($q$select * from public.trips$q$,'42501','permission denied');
+select pg_temp.expect_error($q$select * from public.trip_resources$q$,'42501','permission denied');
 select pg_temp.expect_error($q$select public.is_trip_member('10000000-0000-0000-0000-000000000001')$q$,'42501','permission denied');
 reset role;
 
@@ -170,8 +185,11 @@ set role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',false);
 insert into public.places(id,trip_id,created_by,name) values ('52000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','Contributor row');
 update public.places set notes='allowed' where id='52000000-0000-0000-0000-000000000004';
+insert into public.trip_resources(id,trip_id,created_by,kind,title,external_url) values ('56000000-0000-0000-0000-000000000014','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','photo_album','Trip album','https://photos.example/trip');
+update public.trip_resources set details='allowed' where id='56000000-0000-0000-0000-000000000014';
 reset role;
 select pg_temp.assert_true((select notes='allowed' from public.places where id='52000000-0000-0000-0000-000000000004'),'contributor insert and update succeed');
+select pg_temp.assert_true((select details='allowed' from public.trip_resources where id='56000000-0000-0000-0000-000000000014'),'contributor resource insert and update succeed');
 
 -- Split identity is immutable even when every proposed identifier would otherwise resolve.
 insert into public.expense_splits(trip_id,expense_id,participant_id,share_minor) values ('10000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000011',100);
@@ -185,6 +203,7 @@ reset role;
 -- Owner deletion cascades through a populated trip, including ledger rows.
 insert into public.trips(id,owner_id,title) values ('10000000-0000-0000-0000-000000000013','00000000-0000-0000-0000-000000000013','Delete me');
 insert into public.travel_segments(id,trip_id,participant_id,created_by,kind,departure_place,arrival_place,departs_at,departure_time_zone,arrival_time_zone) select '50000000-0000-0000-0000-000000000013',t.id,(select p.id from public.trip_participants p where p.trip_id=t.id),t.owner_id,'flight','A','B',now(),'UTC','UTC' from public.trips t where t.id='10000000-0000-0000-0000-000000000013';
+insert into public.trip_resources(id,trip_id,created_by,kind,title,details) select '56000000-0000-0000-0000-000000000013',t.id,t.owner_id,'confirmation','Delete resource','Trip deletion test' from public.trips t where t.id='10000000-0000-0000-0000-000000000013';
 insert into public.expenses(id,trip_id,created_by,paid_by_participant_id,description,amount_minor,currency) select '55000000-0000-0000-0000-000000000013',t.id,t.owner_id,(select p.id from public.trip_participants p where p.trip_id=t.id),'Delete expense',100,'USD' from public.trips t where t.id='10000000-0000-0000-0000-000000000013';
 insert into public.expense_splits(trip_id,expense_id,participant_id,share_minor) select trip_id,id,paid_by_participant_id,100 from public.expenses where id='55000000-0000-0000-0000-000000000013';
 set role authenticated;
@@ -192,3 +211,4 @@ select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000013'
 delete from public.trips where id='10000000-0000-0000-0000-000000000013';
 reset role;
 select pg_temp.assert_true(not exists(select 1 from public.trips where id='10000000-0000-0000-0000-000000000013'),'owner deletes populated trip');
+select pg_temp.assert_true(not exists(select 1 from public.trip_resources where id='56000000-0000-0000-0000-000000000013'),'trip deletion cascades to resources');

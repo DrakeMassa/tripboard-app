@@ -7,10 +7,11 @@
 - Secure invitation acceptance and membership roles
 - Arrival and departure board
 - Lodging cards
+- Tickets, confirmations, parking details, document links, and shared-album links
 - Empty, loading, error, and offline states
 - Family-friendly contextual onboarding
 
-Exit condition: a real group can sign in, join a trip securely, and answer “when does everyone arrive?” without using mock data.
+Exit condition: a real group can sign in, join a trip securely, find its essential tickets and links, and answer “when does everyone arrive?” without using mock data.
 
 ## Phase 2 — Trip Inbox and places
 
