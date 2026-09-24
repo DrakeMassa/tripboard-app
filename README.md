@@ -1,6 +1,6 @@
 # Wanderly / Tripboard
 
-A shared trip workspace built with Expo for iOS, Android, and web. The current checkpoint is a **pilot build**: unsigned users see a fixture-backed Columbia preview, while authenticated users can create the live Columbia trip and save tickets, confirmations, parking details, documents, and shared-album links.
+A shared trip workspace built with Expo for iOS, Android, and web. The current checkpoint is a **pilot build**: unsigned users see a fixture-backed Columbia preview, while authenticated users can create and edit the live Columbia trip; manage travel, lodging, and daily plans; export calendar entries; and save tickets, confirmations, parking details, documents, and shared-album links.
 
 ## Current checkpoint
 
@@ -8,6 +8,8 @@ A shared trip workspace built with Expo for iOS, Android, and web. The current c
 - A reviewed initial Supabase schema with RLS, protected ownership/membership invariants, durable participants, and integer-minor-unit expenses
 - Tokenized invitation functions that require confirmed, non-anonymous accounts
 - Passwordless email sign-in, live trip creation, and member-only ticket/file/link reads and writes
+- Live trip, travel, lodging, itinerary, and trip-resource create/update/delete workflows
+- Portable `.ics` calendar export for travel, lodging, and itinerary entries
 - Database migration/security tests plus lint, type checking, unit tests, and web export in CI
 
 ## Run locally

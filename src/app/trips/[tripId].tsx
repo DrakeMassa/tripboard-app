@@ -5,6 +5,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Avatar, Card, Pill, PreviewNotice, RoundIcon, Screen, SectionTitle } from '@/components/design';
+import { TripDetailsEditor } from '@/components/TripDetailsEditor';
+import { TripPlanManager } from '@/components/TripPlanManager';
 import { TripResources } from '@/components/TripResources';
 import { theme } from '@/constants/theme';
 import { getTrip, LiveTrip } from '@/data/live';
@@ -37,6 +39,7 @@ export default function TripDetailScreen() {
   const isPreview = tripId === previewTrip.id;
   const [liveTrip, setLiveTrip] = useState<LiveTrip | null>(null);
   const [isLoading, setIsLoading] = useState(!isPreview);
+  const [isEditingTrip, setIsEditingTrip] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -123,7 +126,10 @@ export default function TripDetailScreen() {
           <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
         </Pressable>
         <PreviewNotice label={isPreview ? 'PRODUCT PREVIEW' : 'LIVE TRIP'} />
-        <Pressable accessibilityLabel="Trip settings" style={styles.backButton}>
+        <Pressable
+          accessibilityLabel={isPreview ? 'Preview trip settings' : 'Edit trip details'}
+          onPress={isPreview ? undefined : () => setIsEditingTrip((current) => !current)}
+          style={styles.backButton}>
           <MaterialCommunityIcons color={theme.colors.forest} name="dots-horizontal" size={22} />
         </Pressable>
       </View>
@@ -145,6 +151,17 @@ export default function TripDetailScreen() {
         </View>
       </View>
 
+      {!isPreview && isEditingTrip ? (
+        <TripDetailsEditor
+          onCancel={() => setIsEditingTrip(false)}
+          onSaved={(saved) => {
+            setLiveTrip(saved);
+            setIsEditingTrip(false);
+          }}
+          trip={liveTrip!}
+        />
+      ) : null}
+
       <View style={styles.summaryGrid}>
         <Card style={styles.summaryCard}>
           <RoundIcon name="airplane-landing" />
@@ -158,11 +175,12 @@ export default function TripDetailScreen() {
         </Card>
       </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="Add travel">Arrival board</SectionTitle>
-        <Card style={styles.flatCard}>
-          {isPreview
-            ? previewTrip.arrivals.map((arrival, index) => (
+      {isPreview ? (
+        <>
+          <View style={styles.section}>
+            <SectionTitle action="Add travel">Arrival board</SectionTitle>
+            <Card style={styles.flatCard}>
+              {previewTrip.arrivals.map((arrival, index) => (
                 <View key={arrival.id} style={[styles.arrivalRow, index > 0 && styles.divider]}>
                   <View style={styles.routeIcon}>
                     <MaterialCommunityIcons color={theme.colors.forest} name="airplane" size={18} />
@@ -178,29 +196,23 @@ export default function TripDetailScreen() {
                     </Text>
                   </View>
                 </View>
-              ))
-            : null}
-          <View style={[styles.arrivalRow, isPreview && styles.divider]}>
-            <View style={[styles.routeIcon, styles.missingIcon]}>
-              <MaterialCommunityIcons color={theme.colors.muted} name="plus" size={18} />
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.itemTitle}>
-                {isPreview ? '3 travelers need travel details' : 'No live travel details yet'}
-              </Text>
-              <Text style={styles.itemMeta}>
-                {isPreview ? 'Add arrival and return plans for the group' : 'Travel entry is the next pilot step'}
-              </Text>
-            </View>
+              ))}
+              <View style={[styles.arrivalRow, styles.divider]}>
+                <View style={[styles.routeIcon, styles.missingIcon]}>
+                  <MaterialCommunityIcons color={theme.colors.muted} name="plus" size={18} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.itemTitle}>3 travelers need travel details</Text>
+                  <Text style={styles.itemMeta}>Add arrival and return plans for the group</Text>
+                </View>
+              </View>
+            </Card>
           </View>
-        </Card>
-      </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="See all days">Columbia plan</SectionTitle>
-        <Card>
-          {isPreview ? (
-            previewTrip.itinerary.map((item, index) => (
+          <View style={styles.section}>
+            <SectionTitle action="See all days">Columbia plan</SectionTitle>
+            <Card>
+              {previewTrip.itinerary.map((item, index) => (
               <View key={item.id} style={styles.planRow}>
                 <View style={styles.planTimeColumn}>
                   <Text style={styles.planTime}>{item.time}</Text>
@@ -211,32 +223,29 @@ export default function TripDetailScreen() {
                   <Text style={styles.itemMeta}>{item.detail}</Text>
                 </View>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyPlan}>
-              <MaterialCommunityIcons color={theme.colors.moss} name="calendar-plus" size={28} />
-              <View style={styles.flex}>
-                <Text style={styles.itemTitle}>No live itinerary items yet</Text>
-                <Text style={styles.itemMeta}>Game-day and other itinerary editing comes after essentials.</Text>
-              </View>
-            </View>
-          )}
-        </Card>
-      </View>
+              ))}
+            </Card>
+          </View>
+        </>
+      ) : (
+        <TripPlanManager tripId={tripId} tripLocation={liveTrip!.location} />
+      )}
 
       <TripResources
         previewResources={isPreview ? previewTrip.resources : undefined}
         tripId={tripId}
       />
 
-      <Card style={styles.stayCard}>
-        <RoundIcon backgroundColor={theme.colors.forest} color={theme.colors.white} name="bed-king-outline" />
-        <View style={styles.flex}>
-          <Text style={styles.itemTitle}>Lodging</Text>
-          <Text style={styles.itemMeta}>Add address and check-in details</Text>
-        </View>
-        <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={22} />
-      </Card>
+      {isPreview ? (
+        <Card style={styles.stayCard}>
+          <RoundIcon backgroundColor={theme.colors.forest} color={theme.colors.white} name="bed-king-outline" />
+          <View style={styles.flex}>
+            <Text style={styles.itemTitle}>Lodging</Text>
+            <Text style={styles.itemMeta}>Add address and check-in details</Text>
+          </View>
+          <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={22} />
+        </Card>
+      ) : null}
     </Screen>
   );
 }

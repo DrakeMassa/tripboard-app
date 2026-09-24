@@ -5,7 +5,13 @@ import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-nat
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Card, SectionTitle } from '@/components/design';
 import { theme } from '@/constants/theme';
-import { createTripResource, listTripResources, LiveTripResource } from '@/data/live';
+import {
+  createTripResource,
+  deleteTripResource,
+  listTripResources,
+  LiveTripResource,
+  updateTripResource,
+} from '@/data/live';
 import { normalizeExternalResourceUrl } from '@/domain/resources';
 import type { TripResourceKind, TripResourcePreview } from '@/types/trip';
 
@@ -37,6 +43,7 @@ type DisplayResource = {
   kind: TripResourceKind;
   title: string;
   detail: string;
+  details: string;
   externalUrl: string | null;
   isPlaceholder: boolean;
 };
@@ -47,13 +54,14 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
     kind: resource.kind,
     title: resource.title,
     detail: resource.details || resource.provider || 'Saved with this trip',
+    details: resource.details ?? '',
     externalUrl: resource.externalUrl,
     isPlaceholder: false,
   };
 }
 
 function toPreviewDisplay(resource: TripResourcePreview): DisplayResource {
-  return { ...resource, isPlaceholder: true };
+  return { ...resource, details: resource.detail, isPlaceholder: true };
 }
 
 export function TripResources({
@@ -71,6 +79,9 @@ export function TripResources({
   const [isLoading, setIsLoading] = useState(!isPreview);
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [editingResource, setEditingResource] = useState<DisplayResource | null>(null);
   const [kind, setKind] = useState<TripResourceKind>('ticket');
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
@@ -108,7 +119,31 @@ export function TripResources({
     setDetails('');
     setExternalUrl('');
     setError(null);
+    setEditingResource(null);
+    setIsConfirmingDelete(false);
     setIsAdding(false);
+  };
+
+  const startAdding = () => {
+    setEditingResource(null);
+    setKind('ticket');
+    setTitle('');
+    setDetails('');
+    setExternalUrl('');
+    setError(null);
+    setIsConfirmingDelete(false);
+    setIsAdding(true);
+  };
+
+  const startEditing = (resource: DisplayResource) => {
+    setEditingResource(resource);
+    setKind(resource.kind);
+    setTitle(resource.title);
+    setDetails(resource.details);
+    setExternalUrl(resource.externalUrl ?? '');
+    setError(null);
+    setIsConfirmingDelete(false);
+    setIsAdding(true);
   };
 
   const handleSave = async () => {
@@ -122,19 +157,44 @@ export function TripResources({
     setIsSaving(true);
     setError(null);
     try {
-      const resource = await createTripResource({
-        tripId,
+      const shared = {
         kind,
         title: normalizedTitle,
         details,
         externalUrl: normalizeExternalResourceUrl(externalUrl),
+      };
+      const resource = editingResource
+        ? await updateTripResource({ id: editingResource.id, ...shared })
+        : await createTripResource({ tripId, ...shared });
+      const display = toLiveDisplay(resource);
+      setResources((current) => {
+        const exists = current.some((item) => item.id === display.id);
+        return exists ? current.map((item) => (item.id === display.id ? display : item)) : [...current, display];
       });
-      setResources((current) => [...current, toLiveDisplay(resource)]);
       resetForm();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save this trip item.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editingResource || isDeleting) return;
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true);
+      return;
+    }
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await deleteTripResource(editingResource.id);
+      setResources((current) => current.filter((item) => item.id !== editingResource.id));
+      resetForm();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not delete this trip item.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -162,57 +222,63 @@ export function TripResources({
       {!isLoading && resources.length > 0 ? (
         <Card style={styles.flatCard}>
           {resources.map((resource, index) => (
-            <Pressable
-              accessibilityHint={resource.externalUrl ? 'Opens the linked item' : undefined}
-              accessibilityRole={resource.externalUrl ? 'link' : undefined}
-              key={resource.id}
-              onPress={resource.externalUrl ? () => void openResource(resource.externalUrl as string) : undefined}
-              style={({ pressed }) => [
-                styles.resourceRow,
-                index > 0 && styles.divider,
-                pressed && resource.externalUrl && styles.pressed,
-              ]}>
-              <View style={styles.resourceIcon}>
-                <MaterialCommunityIcons
-                  color={theme.colors.forest}
-                  name={resourceIcons[resource.kind]}
-                  size={20}
-                />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.itemTitle}>{resource.title}</Text>
-                <Text style={styles.itemMeta}>{resource.detail}</Text>
-              </View>
-              <View style={styles.resourceStatus}>
-                <Text
-                  style={
-                    resource.externalUrl
-                      ? styles.linkedText
-                      : resource.isPlaceholder
-                        ? styles.needsDetailsText
-                        : styles.savedText
-                  }>
-                  {resource.externalUrl ? 'OPEN' : resource.isPlaceholder ? 'ADD DETAILS' : 'SAVED'}
-                </Text>
-                <MaterialCommunityIcons
-                  color={
-                    resource.externalUrl
-                      ? theme.colors.forestSoft
-                      : resource.isPlaceholder
-                        ? theme.colors.coral
-                        : theme.colors.muted
-                  }
-                  name={
-                    resource.externalUrl
-                      ? 'open-in-new'
-                      : resource.isPlaceholder
-                        ? 'plus-circle-outline'
-                        : 'check-circle-outline'
-                  }
-                  size={18}
-                />
-              </View>
-            </Pressable>
+            <View key={resource.id} style={[styles.resourceRow, index > 0 && styles.divider]}>
+              <Pressable
+                accessibilityHint={resource.externalUrl ? 'Opens the linked item' : undefined}
+                accessibilityRole={resource.externalUrl ? 'link' : undefined}
+                onPress={resource.externalUrl ? () => void openResource(resource.externalUrl as string) : undefined}
+                style={({ pressed }) => [styles.resourceMain, pressed && resource.externalUrl && styles.pressed]}>
+                <View style={styles.resourceIcon}>
+                  <MaterialCommunityIcons
+                    color={theme.colors.forest}
+                    name={resourceIcons[resource.kind]}
+                    size={20}
+                  />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.itemTitle}>{resource.title}</Text>
+                  <Text style={styles.itemMeta}>{resource.detail}</Text>
+                </View>
+                <View style={styles.resourceStatus}>
+                  <Text
+                    style={
+                      resource.externalUrl
+                        ? styles.linkedText
+                        : resource.isPlaceholder
+                          ? styles.needsDetailsText
+                          : styles.savedText
+                    }>
+                    {resource.externalUrl ? 'OPEN' : resource.isPlaceholder ? 'ADD DETAILS' : 'SAVED'}
+                  </Text>
+                  <MaterialCommunityIcons
+                    color={
+                      resource.externalUrl
+                        ? theme.colors.forestSoft
+                        : resource.isPlaceholder
+                          ? theme.colors.coral
+                          : theme.colors.muted
+                    }
+                    name={
+                      resource.externalUrl
+                        ? 'open-in-new'
+                        : resource.isPlaceholder
+                          ? 'plus-circle-outline'
+                          : 'check-circle-outline'
+                    }
+                    size={18}
+                  />
+                </View>
+              </Pressable>
+              {!isPreview ? (
+                <Pressable
+                  accessibilityLabel={`Edit ${resource.title}`}
+                  accessibilityRole="button"
+                  onPress={() => startEditing(resource)}
+                  style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}>
+                  <MaterialCommunityIcons color={theme.colors.forest} name="pencil-outline" size={18} />
+                </Pressable>
+              ) : null}
+            </View>
           ))}
         </Card>
       ) : null}
@@ -230,12 +296,12 @@ export function TripResources({
       ) : null}
 
       {!isPreview && user && !isAdding ? (
-        <ActionButton icon="plus" label="Add ticket, file, or link" onPress={() => setIsAdding(true)} />
+        <ActionButton icon="plus" label="Add ticket, file, or link" onPress={startAdding} />
       ) : null}
 
       {!isPreview && user && isAdding ? (
         <Card style={styles.formCard}>
-          <Text style={styles.formTitle}>Add a trip item</Text>
+          <Text style={styles.formTitle}>{editingResource ? 'Edit trip item' : 'Add a trip item'}</Text>
           <View style={styles.kindRow}>
             {resourceKinds.map((option) => (
               <Pressable
@@ -283,6 +349,17 @@ export function TripResources({
             For Apple Photos or Google Photos, paste the shared-album link. Only secure HTTPS links are accepted.
           </Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {editingResource ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void handleDelete()}
+              style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}>
+              <MaterialCommunityIcons color={theme.colors.danger} name="trash-can-outline" size={17} />
+              <Text style={styles.deleteText}>
+                {isDeleting ? 'Deleting…' : isConfirmingDelete ? 'Tap again to delete' : 'Delete'}
+              </Text>
+            </Pressable>
+          ) : null}
           <View style={styles.formActions}>
             <View style={styles.flex}>
               <ActionButton label="Cancel" onPress={resetForm} secondary />
@@ -290,7 +367,7 @@ export function TripResources({
             <View style={styles.flex}>
               <ActionButton
                 icon="content-save-outline"
-                label={isSaving ? 'Saving…' : 'Save item'}
+                label={isSaving ? 'Saving…' : editingResource ? 'Update item' : 'Save item'}
                 onPress={isSaving ? undefined : () => void handleSave()}
               />
             </View>
@@ -306,7 +383,8 @@ export function TripResources({
 const styles = StyleSheet.create({
   section: { gap: theme.spacing.md },
   flatCard: { paddingVertical: 4 },
-  resourceRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 14 },
+  resourceRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm, paddingVertical: 14 },
+  resourceMain: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: theme.spacing.md },
   divider: { borderTopColor: theme.colors.line, borderTopWidth: 1 },
   resourceIcon: { alignItems: 'center', backgroundColor: theme.colors.sand, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
   resourceStatus: { alignItems: 'flex-end', gap: 5 },
@@ -316,6 +394,7 @@ const styles = StyleSheet.create({
   itemTitle: { color: theme.colors.ink, fontSize: 14, fontWeight: '800' },
   itemMeta: { color: theme.colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   flex: { flex: 1 },
+  editButton: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.pill, height: 36, justifyContent: 'center', width: 36 },
   pressed: { opacity: 0.72 },
   loadingText: { color: theme.colors.muted, fontSize: 13 },
   emptyCard: { alignItems: 'center', backgroundColor: theme.colors.coralSoft, flexDirection: 'row', gap: theme.spacing.md },
@@ -330,5 +409,7 @@ const styles = StyleSheet.create({
   multilineInput: { minHeight: 96 },
   helperText: { color: theme.colors.muted, fontSize: 11, lineHeight: 16 },
   errorText: { color: theme.colors.danger, fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  deleteButton: { alignItems: 'center', alignSelf: 'flex-start', borderColor: theme.colors.danger, borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 6, minHeight: 40, paddingHorizontal: theme.spacing.md },
+  deleteText: { color: theme.colors.danger, fontSize: 12, fontWeight: '800' },
   formActions: { flexDirection: 'row', gap: theme.spacing.md },
 });

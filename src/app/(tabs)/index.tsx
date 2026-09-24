@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  ActionButton,
   Avatar,
   Card,
   Eyebrow,
@@ -65,7 +66,7 @@ export default function HomeScreen() {
 
   const tripId = liveTrip?.id ?? previewTrip.id;
   const tripTitle = liveTrip?.title ?? previewTrip.title;
-  const tripLocation = liveTrip?.location ?? previewTrip.location;
+  const tripLocation = liveTrip ? liveTrip.location ?? 'Location to be added' : previewTrip.location;
   const tripDateRange = liveTrip ? formatDateRange(liveTrip) : previewTrip.dateRange;
   const countdown = liveTrip ? getDaysUntil(liveTrip.startDate) : previewTrip.daysUntil;
 
@@ -112,72 +113,95 @@ export default function HomeScreen() {
       </Pressable>
 
       <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
-          <RoundIcon name="airplane-landing" />
-          <Text style={styles.statValue}>Add travel</Text>
-          <Text style={styles.statLabel}>Arrival and return</Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
-          <Text style={styles.statValue}>Game tickets</Text>
-          <Text style={styles.statLabel}>Needs a link</Text>
-        </Card>
+        <Pressable
+          onPress={() => router.push(`/trips/${tripId}`)}
+          style={({ pressed }) => [styles.statPressable, pressed && styles.pressed]}>
+          <Card style={styles.statCard}>
+            <RoundIcon name="airplane-landing" />
+            <Text style={styles.statValue}>{liveTrip ? 'Manage travel' : 'Add travel'}</Text>
+            <Text style={styles.statLabel}>Arrival and return</Text>
+          </Card>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`/trips/${tripId}`)}
+          style={({ pressed }) => [styles.statPressable, pressed && styles.pressed]}>
+          <Card style={styles.statCard}>
+            <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
+            <Text style={styles.statValue}>{liveTrip ? 'Tickets & links' : 'Game tickets'}</Text>
+            <Text style={styles.statLabel}>{liveTrip ? 'Open or update' : 'Needs a link'}</Text>
+          </Card>
+        </Pressable>
       </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="Add travel">Who arrives when</SectionTitle>
-        <Card style={styles.arrivalCard}>
-          {previewTrip.arrivals.map((arrival, index) => (
-            <View
-              key={arrival.id}
-              style={[styles.arrivalRow, index > 0 && styles.rowDivider]}>
-              <Avatar initials={arrival.initials} />
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{arrival.name}</Text>
-                <Text style={styles.rowDetail}>{arrival.route}</Text>
-              </View>
-              <View style={styles.arrivalTime}>
-                <Text style={styles.rowTitle}>{arrival.arrivalTime}</Text>
-                <Text style={styles.statusText}>
-                  {arrival.status === 'on-time' ? 'On time' : arrival.status === 'later' ? 'Later' : 'Add details'}
-                </Text>
-              </View>
-            </View>
-          ))}
+      {liveTrip ? (
+        <Card style={styles.liveWorkspaceCard}>
+          <RoundIcon backgroundColor={theme.colors.forest} color={theme.colors.white} name="pencil-outline" />
+          <View style={styles.flex}>
+            <Text style={styles.rowTitle}>Your live trip is ready to edit</Text>
+            <Text style={styles.rowDetail}>
+              Add or update travel, lodging, daily plans, tickets, parking, confirmations, and album links.
+            </Text>
+          </View>
+          <ActionButton label="Open trip" onPress={() => router.push(`/trips/${tripId}`)} />
         </Card>
-      </View>
+      ) : (
+        <>
+          <View style={styles.section}>
+            <SectionTitle action="Add travel">Who arrives when</SectionTitle>
+            <Card style={styles.arrivalCard}>
+              {previewTrip.arrivals.map((arrival, index) => (
+                <View
+                  key={arrival.id}
+                  style={[styles.arrivalRow, index > 0 && styles.rowDivider]}>
+                  <Avatar initials={arrival.initials} />
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>{arrival.name}</Text>
+                    <Text style={styles.rowDetail}>{arrival.route}</Text>
+                  </View>
+                  <View style={styles.arrivalTime}>
+                    <Text style={styles.rowTitle}>{arrival.arrivalTime}</Text>
+                    <Text style={styles.statusText}>
+                      {arrival.status === 'on-time' ? 'On time' : arrival.status === 'later' ? 'Later' : 'Add details'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="Full itinerary">Columbia plan</SectionTitle>
-        <Card>
-          {previewTrip.itinerary.map((item, index) => (
-            <View key={item.id} style={styles.planRow}>
-              <View style={styles.timeColumn}>
-                <Text style={styles.planTime}>{item.time}</Text>
-                {index < previewTrip.itinerary.length - 1 ? <View style={styles.timeline} /> : null}
-              </View>
-              <RoundIcon
-                backgroundColor={item.category === 'food' ? theme.colors.coralSoft : theme.colors.sage}
-                color={item.category === 'food' ? theme.colors.coral : theme.colors.forest}
-                name={
-                  item.category === 'food'
-                    ? 'silverware-fork-knife'
-                    : item.category === 'stay'
-                      ? 'bed-king-outline'
-                      : item.category === 'activity'
-                        ? 'stadium-outline'
-                        : 'airplane'
-                }
-                size={18}
-              />
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowDetail}>{item.detail}</Text>
-              </View>
-            </View>
-          ))}
-        </Card>
-      </View>
+          <View style={styles.section}>
+            <SectionTitle action="Full itinerary">Columbia plan</SectionTitle>
+            <Card>
+              {previewTrip.itinerary.map((item, index) => (
+                <View key={item.id} style={styles.planRow}>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.planTime}>{item.time}</Text>
+                    {index < previewTrip.itinerary.length - 1 ? <View style={styles.timeline} /> : null}
+                  </View>
+                  <RoundIcon
+                    backgroundColor={item.category === 'food' ? theme.colors.coralSoft : theme.colors.sage}
+                    color={item.category === 'food' ? theme.colors.coral : theme.colors.forest}
+                    name={
+                      item.category === 'food'
+                        ? 'silverware-fork-knife'
+                        : item.category === 'stay'
+                          ? 'bed-king-outline'
+                          : item.category === 'activity'
+                            ? 'stadium-outline'
+                            : 'airplane'
+                    }
+                    size={18}
+                  />
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>{item.title}</Text>
+                    <Text style={styles.rowDetail}>{item.detail}</Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </View>
+        </>
+      )}
 
       <View style={styles.assistantCard}>
         <RoundIcon backgroundColor="rgba(255,255,255,0.13)" color={theme.colors.white} name="creation-outline" />
@@ -223,6 +247,7 @@ const styles = StyleSheet.create({
   avatarRow: { flexDirection: 'row' },
   heroPeople: { color: theme.colors.white, fontSize: 12, fontWeight: '700', marginLeft: 10 },
   statsRow: { flexDirection: 'row', gap: theme.spacing.md },
+  statPressable: { flex: 1 },
   statCard: { flex: 1, gap: theme.spacing.sm },
   statValue: { color: theme.colors.ink, fontSize: 16, fontWeight: '800', marginTop: 3 },
   statLabel: { color: theme.colors.muted, fontSize: 12 },
@@ -239,6 +264,7 @@ const styles = StyleSheet.create({
   timeColumn: { alignItems: 'center', width: 66 },
   planTime: { color: theme.colors.muted, fontSize: 11, fontWeight: '700', paddingTop: 13 },
   timeline: { backgroundColor: theme.colors.line, flex: 1, marginTop: 7, width: 1 },
+  liveWorkspaceCard: { alignItems: 'center', backgroundColor: theme.colors.sage, flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md },
   assistantCard: { alignItems: 'center', backgroundColor: theme.colors.forest, borderRadius: theme.radius.lg, flexDirection: 'row', gap: theme.spacing.md, padding: theme.spacing.lg },
   assistantTitle: { color: theme.colors.white, fontSize: 15, fontWeight: '800' },
   assistantCopy: { color: theme.colors.sage, fontSize: 12, marginTop: 3 },
