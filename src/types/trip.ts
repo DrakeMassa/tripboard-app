@@ -26,6 +26,8 @@ export type TripResourceKind =
   | 'link'
   | 'other';
 
+export type TravelKind = 'flight' | 'train' | 'car' | 'ferry' | 'bus' | 'other';
+
 export type TripResourcePreview = {
   id: string;
   itineraryItemId: string | null;

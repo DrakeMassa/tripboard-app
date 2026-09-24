@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeExternalResourceUrl } from '@/domain/resources';
+import { inferResourceProvider, normalizeExternalResourceUrl } from '@/domain/resources';
 
 describe('normalizeExternalResourceUrl', () => {
   it('normalizes secure ticket and shared-album links', () => {
@@ -24,5 +24,11 @@ describe('normalizeExternalResourceUrl', () => {
     'not a url',
   ])('rejects unsafe resource link %s', (value) => {
     expect(() => normalizeExternalResourceUrl(value)).toThrow();
+  });
+
+  it('recognizes common ticket and album providers from secure links', () => {
+    expect(inferResourceProvider('https://www.ticketmaster.com/event/123')).toBe('Ticketmaster');
+    expect(inferResourceProvider('https://photos.google.com/share/abc')).toBe('Google');
+    expect(inferResourceProvider('not-yet-a-url')).toBeNull();
   });
 });

@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { CreateTripForm } from '@/components/CreateTripForm';
 import { ActionButton, Card, Eyebrow, Heading, Pill, PreviewNotice, Screen } from '@/components/design';
+import { DestinationBackdrop } from '@/components/DestinationBackdrop';
 import { theme } from '@/constants/theme';
-import { createColumbiaPilot, listTrips, LiveTrip } from '@/data/live';
+import { listTrips, LiveTrip } from '@/data/live';
 import { previewTrip } from '@/data/preview';
 
 function formatDateRange(startDate: string | null, endDate: string | null): string {
@@ -37,7 +39,7 @@ export default function TripsScreen() {
   const { isLoading: isAuthLoading, user } = useAuth();
   const [liveTrips, setLiveTrips] = useState<LiveTrip[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshTrips = useCallback(async () => {
@@ -61,24 +63,13 @@ export default function TripsScreen() {
     void Promise.resolve().then(refreshTrips);
   }, [refreshTrips]);
 
-  const handlePrimaryAction = async () => {
+  const handlePrimaryAction = () => {
     if (!user) {
       router.push('/profile');
       return;
     }
-    if (liveTrips.length > 0 || isCreating) return;
-
-    setIsCreating(true);
     setError(null);
-    try {
-      const trip = await createColumbiaPilot();
-      setLiveTrips([trip]);
-      router.push(`/trips/${trip.id}`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not create the pilot trip.');
-    } finally {
-      setIsCreating(false);
-    }
+    setIsCreateFormOpen((current) => !current);
   };
 
   const isLive = Boolean(user);
@@ -101,15 +92,24 @@ export default function TripsScreen() {
             ? 'Checking sign-in…'
             : !user
               ? 'Sign in to start the pilot'
-              : liveTrips.length > 0
-                ? 'Columbia pilot created'
-                : isCreating
-                  ? 'Creating pilot…'
-                  : 'Create Columbia pilot'
+              : isCreateFormOpen
+                ? 'Close new trip form'
+                : 'Create a new trip'
         }
-        onPress={isAuthLoading ? undefined : () => void handlePrimaryAction()}
-        secondary={Boolean(user && liveTrips.length > 0)}
+        onPress={isAuthLoading ? undefined : handlePrimaryAction}
+        secondary={Boolean(user && isCreateFormOpen)}
       />
+
+      {user && isCreateFormOpen ? (
+        <CreateTripForm
+          onCancel={() => setIsCreateFormOpen(false)}
+          onCreated={(trip) => {
+            setLiveTrips((current) => [...current, trip]);
+            setIsCreateFormOpen(false);
+            router.push(`/trips/${trip.id}`);
+          }}
+        />
+      ) : null}
 
       {error ? (
         <Card style={styles.errorCard}>
@@ -130,9 +130,12 @@ export default function TripsScreen() {
             style={({ pressed }) => pressed && styles.pressed}>
             <Card style={styles.tripCard}>
               <View style={styles.cover}>
-                <View style={styles.coverOrb} />
+                <DestinationBackdrop
+                  compact
+                  location={previewTrip.location}
+                  title={previewTrip.title}
+                />
                 <Pill tone="white">{previewTrip.daysUntil} DAYS AWAY</Pill>
-                <MaterialCommunityIcons color={theme.colors.sage} name="map-marker-radius-outline" size={72} />
               </View>
               <View style={styles.tripCopy}>
                 <Text style={styles.tripTitle}>{previewTrip.title}</Text>
@@ -160,11 +163,14 @@ export default function TripsScreen() {
               style={({ pressed }) => pressed && styles.pressed}>
               <Card style={styles.tripCard}>
                 <View style={styles.cover}>
-                  <View style={styles.coverOrb} />
+                  <DestinationBackdrop
+                    compact
+                    location={trip.location ?? ''}
+                    title={trip.title}
+                  />
                   <Pill tone="white">
                     {countdown === null ? 'DATES PENDING' : `${countdown} DAYS AWAY`}
                   </Pill>
-                  <MaterialCommunityIcons color={theme.colors.sage} name="map-marker-radius-outline" size={72} />
                 </View>
                 <View style={styles.tripCopy}>
                   <Text style={styles.tripTitle}>{trip.title}</Text>
@@ -187,7 +193,7 @@ export default function TripsScreen() {
         {isLive && !isLoading && trips.length === 0 && !error ? (
           <Card style={styles.emptyLiveCard}>
             <Text style={styles.emptyTitle}>Your live workspace is empty</Text>
-            <Text style={styles.emptyText}>Create the Columbia pilot above to begin adding real trip details.</Text>
+            <Text style={styles.emptyText}>Create a trip above, then add travel, lodging, plans, tickets, and guests.</Text>
           </Card>
         ) : null}
       </View>
@@ -209,8 +215,7 @@ const styles = StyleSheet.create({
   section: { gap: theme.spacing.md },
   sectionLabel: { color: theme.colors.muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   tripCard: { padding: 0, overflow: 'hidden' },
-  cover: { alignItems: 'flex-end', backgroundColor: theme.colors.forest, flexDirection: 'row', height: 150, justifyContent: 'space-between', overflow: 'hidden', padding: theme.spacing.lg },
-  coverOrb: { backgroundColor: theme.colors.forestSoft, borderRadius: 120, height: 210, position: 'absolute', right: -42, top: -86, width: 210 },
+  cover: { alignItems: 'flex-start', backgroundColor: theme.colors.forest, height: 170, justifyContent: 'flex-start', overflow: 'hidden', padding: theme.spacing.lg },
   tripCopy: { gap: 5, padding: theme.spacing.lg },
   tripTitle: { color: theme.colors.ink, fontFamily: 'serif', fontSize: 25, fontWeight: '800' },
   tripLocation: { color: theme.colors.muted, fontSize: 13 },

@@ -31,7 +31,9 @@ Then run `npm start`, open the **You** tab, and request a sign-in link. After si
 
 ## 4. Add the first essentials
 
-Open the live trip and use **Add ticket, file, or link**. An item can contain details without a URL, or it can open a secure HTTPS link. For a shared album, create the album in Apple Photos or Google Photos and paste its sharing link; Wanderly does not duplicate the album or its permissions.
+Open the live trip. The live workspace now supports editing the trip name, destination, dates, and note; adding/editing/deleting travel, lodging, and itinerary plans; and adding/editing/deleting ticket, confirmation, parking, document, shared-album, and other secure links. Use the calendar icon on a saved flight, stay, or plan to download a standard calendar entry.
+
+An essential can contain details without a URL, or it can open a secure HTTPS link. For a shared album, create the album in Apple Photos or Google Photos and paste its sharing link; Wanderly does not duplicate the album or its permissions. For a boarding pass or mobile game ticket, save the original provider's secure link so the latest pass opens at the source.
 
 Details still needed from the trip organizer:
 
@@ -47,5 +49,6 @@ Details still needed from the trip organizer:
 
 - External links and typed details work; private file upload is not enabled yet.
 - Invitation RPCs exist in the database, but the invitation UI is not wired yet.
-- Travel, lodging, and itinerary editors are still the next live-data slice.
+- Calendar export is available; connected Google/Outlook sync and email confirmation import are not enabled yet.
+- Airline and hotel passwords are never collected. Provider deep links remain the source of truth for live passes.
 - Run the Claude read-only audit only after the migration passes CI and the hosted Supabase smoke test is complete.
