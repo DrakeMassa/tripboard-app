@@ -247,7 +247,13 @@ export async function updateTrip(input: {
   return mapTrip(data as TripRow);
 }
 
-export async function createColumbiaPilot(): Promise<LiveTrip> {
+export async function createTrip(input: {
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): Promise<LiveTrip> {
   const client = requireSupabase();
   const {
     data: { user },
@@ -256,16 +262,17 @@ export async function createColumbiaPilot(): Promise<LiveTrip> {
 
   if (userError) throw userError;
   if (!user) throw new Error('Sign in before creating a trip.');
+  if (!input.title.trim()) throw new Error('Give this trip a name.');
 
   const { data, error } = await client
     .from('trips')
     .insert({
       owner_id: user.id,
-      title: 'Columbia game weekend',
-      description: 'Pilot trip with my sister and her fiancé.',
-      location: 'Columbia, Missouri',
-      start_date: '2026-10-07',
-      end_date: '2026-10-12',
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      location: input.location?.trim() || null,
+      start_date: input.startDate || null,
+      end_date: input.endDate || null,
       base_currency: 'USD',
     })
     .select('id,title,description,location,start_date,end_date,base_currency')
@@ -273,6 +280,43 @@ export async function createColumbiaPilot(): Promise<LiveTrip> {
 
   if (error) throw error;
   return mapTrip(data as TripRow);
+}
+
+export async function createColumbiaPilot(): Promise<LiveTrip> {
+  return createTrip({
+    title: 'Columbia game weekend',
+    description: 'Pilot trip with my sister and her fiancé.',
+    location: 'Columbia, Missouri',
+    startDate: '2026-10-07',
+    endDate: '2026-10-12',
+  });
+}
+
+export async function createTripInvitation(input: {
+  tripId: string;
+  invitedEmail: string;
+}): Promise<string> {
+  await getAuthenticatedUserId();
+  const { data, error } = await requireSupabase().rpc('create_trip_invitation', {
+    p_trip_id: input.tripId,
+    p_role: 'member',
+    p_invited_email: input.invitedEmail.trim().toLowerCase(),
+    p_expires_in: '7 days',
+    p_max_uses: 1,
+  });
+  if (error) throw error;
+  if (typeof data !== 'string' || !data) throw new Error('Could not create a secure invitation link.');
+  return data;
+}
+
+export async function acceptTripInvitation(token: string): Promise<string> {
+  await getAuthenticatedUserId();
+  const { data, error } = await requireSupabase().rpc('accept_trip_invitation', {
+    p_token: token,
+  });
+  if (error) throw error;
+  if (typeof data !== 'string' || !data) throw new Error('Could not accept this invitation.');
+  return data;
 }
 
 export async function listTripResources(tripId: string): Promise<LiveTripResource[]> {
@@ -290,6 +334,7 @@ export async function createTripResource(input: {
   tripId: string;
   kind: TripResourceKind;
   title: string;
+  provider?: string | null;
   details?: string | null;
   externalUrl?: string | null;
 }): Promise<LiveTripResource> {
@@ -309,6 +354,7 @@ export async function createTripResource(input: {
       created_by: user.id,
       kind: input.kind,
       title: input.title.trim(),
+      provider: input.provider?.trim() || null,
       details: input.details?.trim() || null,
       external_url: input.externalUrl,
     })
@@ -323,6 +369,7 @@ export async function updateTripResource(input: {
   id: string;
   kind: TripResourceKind;
   title: string;
+  provider?: string | null;
   details?: string | null;
   externalUrl?: string | null;
 }): Promise<LiveTripResource> {
@@ -332,6 +379,7 @@ export async function updateTripResource(input: {
     .update({
       kind: input.kind,
       title: input.title.trim(),
+      provider: input.provider?.trim() || null,
       details: input.details?.trim() || null,
       external_url: input.externalUrl || null,
     })

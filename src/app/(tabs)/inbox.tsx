@@ -75,6 +75,12 @@ export default function InboxScreen() {
           <Text style={styles.cardTitle}>Ticket and pass links</Text>
           <Text style={styles.cardCopy}>Save a secure provider link once, then open the current boarding pass, game ticket, or booking from the trip.</Text>
         </Card>
+        <Card style={styles.availableCard}>
+          <Pill>AVAILABLE NOW</Pill>
+          <MaterialCommunityIcons color={theme.colors.forestSoft} name="image-multiple-outline" size={30} />
+          <Text style={styles.cardTitle}>Destination covers</Text>
+          <Text style={styles.cardCopy}>Each trip rotates licensed destination imagery based on its city and purpose, with attribution and a branded fallback.</Text>
+        </Card>
       </View>
 
       {trip ? (
@@ -115,7 +121,7 @@ export default function InboxScreen() {
         <View style={styles.flex}>
           <Text style={styles.cardTitle}>Personal, not creepy</Text>
           <Text style={styles.cardCopy}>
-            Destination imagery and suggestions should use the trip context and interests you explicitly choose—sports, hiking, food, culture—not hidden browsing or search tracking.
+            Destination covers use the city and words you put in the trip itself. Future suggestions can use interests you explicitly choose—sports, hiking, food, culture—not hidden browsing or search tracking.
           </Text>
         </View>
       </Card>

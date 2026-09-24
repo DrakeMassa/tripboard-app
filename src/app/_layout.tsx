@@ -17,6 +17,7 @@ export default function RootLayout() {
           }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="trips/[tripId]" />
+          <Stack.Screen name="invite/[token]" />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>

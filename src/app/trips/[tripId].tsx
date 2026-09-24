@@ -5,7 +5,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Avatar, Card, Pill, PreviewNotice, RoundIcon, Screen, SectionTitle } from '@/components/design';
+import { DestinationBackdrop } from '@/components/DestinationBackdrop';
 import { TripDetailsEditor } from '@/components/TripDetailsEditor';
+import { TripInvitation } from '@/components/TripInvitation';
 import { TripPlanManager } from '@/components/TripPlanManager';
 import { TripResources } from '@/components/TripResources';
 import { theme } from '@/constants/theme';
@@ -40,6 +42,7 @@ export default function TripDetailScreen() {
   const [liveTrip, setLiveTrip] = useState<LiveTrip | null>(null);
   const [isLoading, setIsLoading] = useState(!isPreview);
   const [isEditingTrip, setIsEditingTrip] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -128,14 +131,18 @@ export default function TripDetailScreen() {
         <PreviewNotice label={isPreview ? 'PRODUCT PREVIEW' : 'LIVE TRIP'} />
         <Pressable
           accessibilityLabel={isPreview ? 'Preview trip settings' : 'Edit trip details'}
-          onPress={isPreview ? undefined : () => setIsEditingTrip((current) => !current)}
+          onPress={
+            isPreview
+              ? () => router.push('/profile')
+              : () => setIsEditingTrip((current) => !current)
+          }
           style={styles.backButton}>
           <MaterialCommunityIcons color={theme.colors.forest} name="dots-horizontal" size={22} />
         </Pressable>
       </View>
 
       <View style={styles.hero}>
-        <View style={styles.heroOrb} />
+        <DestinationBackdrop location={tripLocation} title={tripTitle} />
         <Pill tone="white">{countdown === null ? 'DATES PENDING' : `${countdown} DAYS AWAY`}</Pill>
         <View style={styles.heroCopy}>
           <Text style={styles.heroTitle}>{tripTitle}</Text>
@@ -147,9 +154,25 @@ export default function TripDetailScreen() {
             <Avatar initials="DM" />
             <Avatar initials="+2" offset />
           </View>
-          <ActionButton icon="account-plus-outline" label={isPreview ? 'Invite' : 'Invites next'} />
+          <ActionButton
+            icon="account-plus-outline"
+            label={isPreview ? 'Sign in to invite' : 'Invite traveler'}
+            onPress={
+              isPreview
+                ? () => router.push('/profile')
+                : () => setIsInviting((current) => !current)
+            }
+          />
         </View>
       </View>
+
+      {!isPreview && isInviting ? (
+        <TripInvitation
+          onClose={() => setIsInviting(false)}
+          tripId={tripId}
+          tripTitle={tripTitle}
+        />
+      ) : null}
 
       {!isPreview && isEditingTrip ? (
         <TripDetailsEditor
@@ -254,12 +277,11 @@ const styles = StyleSheet.create({
   topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   backButton: { alignItems: 'center', backgroundColor: theme.colors.surface, borderColor: theme.colors.line, borderRadius: theme.radius.pill, borderWidth: 1, height: 42, justifyContent: 'center', width: 42 },
   centerCard: { alignItems: 'center', gap: theme.spacing.md, paddingVertical: theme.spacing.xxl },
-  hero: { backgroundColor: theme.colors.forest, borderRadius: 28, minHeight: 280, overflow: 'hidden', padding: theme.spacing.xl },
-  heroOrb: { backgroundColor: theme.colors.forestSoft, borderRadius: 160, height: 300, position: 'absolute', right: -100, top: -120, width: 300 },
+  hero: { backgroundColor: theme.colors.forest, borderRadius: 28, minHeight: 320, overflow: 'hidden', padding: theme.spacing.xl },
   heroCopy: { flex: 1, justifyContent: 'center' },
-  heroTitle: { color: theme.colors.white, fontFamily: 'serif', fontSize: 34, fontWeight: '800' },
-  heroLocation: { color: theme.colors.sage, fontSize: 14, marginTop: 5 },
-  heroDates: { color: theme.colors.white, fontSize: 13, fontWeight: '700', marginTop: 14 },
+  heroTitle: { color: theme.colors.white, fontFamily: 'serif', fontSize: 34, fontWeight: '800', textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 8 },
+  heroLocation: { color: theme.colors.white, fontSize: 14, fontWeight: '700', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 6 },
+  heroDates: { color: theme.colors.white, fontSize: 13, fontWeight: '700', marginTop: 14, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 6 },
   heroActions: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   avatarRow: { flexDirection: 'row' },
   summaryGrid: { flexDirection: 'row', gap: theme.spacing.md },

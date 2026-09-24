@@ -1,5 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Linking from 'expo-linking';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -16,6 +17,7 @@ const checklist = [
 ];
 
 export default function ProfileScreen() {
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { isLoading, user } = useAuth();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,9 +32,11 @@ export default function ProfileScreen() {
     setMessage(null);
     setError(null);
     try {
+      const redirectPath =
+        typeof redirect === 'string' && redirect.startsWith('/invite/') ? redirect : '/';
       const { error: signInError } = await requireSupabase().auth.signInWithOtp({
         email: normalizedEmail,
-        options: { emailRedirectTo: Linking.createURL('/') },
+        options: { emailRedirectTo: Linking.createURL(redirectPath) },
       });
       if (signInError) throw signInError;
       setMessage(`Check ${normalizedEmail} for your secure Wanderly sign-in link.`);

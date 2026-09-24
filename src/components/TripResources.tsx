@@ -12,7 +12,7 @@ import {
   LiveTripResource,
   updateTripResource,
 } from '@/data/live';
-import { normalizeExternalResourceUrl } from '@/domain/resources';
+import { inferResourceProvider, normalizeExternalResourceUrl } from '@/domain/resources';
 import type { TripResourceKind, TripResourcePreview } from '@/types/trip';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -42,6 +42,7 @@ type DisplayResource = {
   id: string;
   kind: TripResourceKind;
   title: string;
+  provider: string;
   detail: string;
   details: string;
   externalUrl: string | null;
@@ -53,6 +54,7 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
     id: resource.id,
     kind: resource.kind,
     title: resource.title,
+    provider: resource.provider ?? '',
     detail: resource.details || resource.provider || 'Saved with this trip',
     details: resource.details ?? '',
     externalUrl: resource.externalUrl,
@@ -61,7 +63,7 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
 }
 
 function toPreviewDisplay(resource: TripResourcePreview): DisplayResource {
-  return { ...resource, details: resource.detail, isPlaceholder: true };
+  return { ...resource, provider: '', details: resource.detail, isPlaceholder: true };
 }
 
 export function TripResources({
@@ -84,6 +86,7 @@ export function TripResources({
   const [editingResource, setEditingResource] = useState<DisplayResource | null>(null);
   const [kind, setKind] = useState<TripResourceKind>('ticket');
   const [title, setTitle] = useState('');
+  const [provider, setProvider] = useState('');
   const [details, setDetails] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +119,7 @@ export function TripResources({
   const resetForm = () => {
     setKind('ticket');
     setTitle('');
+    setProvider('');
     setDetails('');
     setExternalUrl('');
     setError(null);
@@ -128,6 +132,7 @@ export function TripResources({
     setEditingResource(null);
     setKind('ticket');
     setTitle('');
+    setProvider('');
     setDetails('');
     setExternalUrl('');
     setError(null);
@@ -139,6 +144,7 @@ export function TripResources({
     setEditingResource(resource);
     setKind(resource.kind);
     setTitle(resource.title);
+    setProvider(resource.provider);
     setDetails(resource.details);
     setExternalUrl(resource.externalUrl ?? '');
     setError(null);
@@ -160,6 +166,7 @@ export function TripResources({
       const shared = {
         kind,
         title: normalizedTitle,
+        provider,
         details,
         externalUrl: normalizeExternalResourceUrl(externalUrl),
       };
@@ -325,6 +332,15 @@ export function TripResources({
             value={title}
           />
           <TextInput
+            accessibilityLabel="Item provider"
+            maxLength={120}
+            onChangeText={setProvider}
+            placeholder="Provider · Ticketmaster, airline, hotel… (optional)"
+            placeholderTextColor={theme.colors.muted}
+            style={styles.input}
+            value={provider}
+          />
+          <TextInput
             accessibilityLabel="Item details"
             multiline
             onChangeText={setDetails}
@@ -339,14 +355,20 @@ export function TripResources({
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            onChangeText={setExternalUrl}
+            onChangeText={(value) => {
+              setExternalUrl(value);
+              if (!provider.trim()) {
+                const inferred = inferResourceProvider(value);
+                if (inferred) setProvider(inferred);
+              }
+            }}
             placeholder="https://… (optional)"
             placeholderTextColor={theme.colors.muted}
             style={styles.input}
             value={externalUrl}
           />
           <Text style={styles.helperText}>
-            For Apple Photos or Google Photos, paste the shared-album link. Only secure HTTPS links are accepted.
+            Paste the original provider link for a current mobile ticket or boarding pass. Shared Apple Photos and Google Photos links work too. Only secure HTTPS links are accepted.
           </Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {editingResource ? (

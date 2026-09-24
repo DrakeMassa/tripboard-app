@@ -51,6 +51,8 @@ There is no single reliable consumer API across airlines and hotels. Wanderly sh
 
 Destination imagery can feel personal without covert tracking.
 
+- The pilot now searches Wikimedia Commons using only the destination and trip title, filters for large landscape images, rotates up to five results, links to the source attribution, and falls back to Wanderly's branded green cover.
+- The photo request does not include trip dates, travelers, confirmations, or private notes.
 - Ask the traveler to choose interest tags such as sports, outdoors, food, architecture, nightlife, family, or relaxation.
 - Combine those declared interests with the trip destination and season.
 - Use licensed, high-resolution images with attribution and a curated fallback for each destination.
@@ -59,7 +61,8 @@ Destination imagery can feel personal without covert tracking.
 
 For the Columbia pilot, `sports` can prioritize a dramatic stadium/game-day image while retaining city and campus alternatives. A Jackson, Wyoming trip with `outdoors` selected can prioritize the Tetons, trail, and summit imagery.
 
+The first pilot infers only broad context from the trip itself (`game`, `beach`, `hiking`, and similar words). It does not read unrelated search or browsing history. Explicit interest controls and `Use as cover` remain a later refinement.
+
 ## Pilot success test
 
 The automation layer is valuable only if a traveler can forward or connect one real confirmation, approve it in under 30 seconds, see it in the correct trip, add it to a calendar without duplication, and open the original live ticket or pass when needed.
-
