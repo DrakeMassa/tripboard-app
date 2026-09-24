@@ -26,7 +26,7 @@ Without public Supabase values, the application remains in Preview mode. Never c
 
 `trip_members` grants authenticated access and roles. `trip_participants` is a durable ledger identity for travelers, payers, and split recipients, including people without accounts. Removing membership does not erase participant history. `trip_resources` keeps trip essentials separate from social clips and can point to an itinerary event without allowing cross-trip references.
 
-The initial migration has not been deployed and is updated in place. Run its disposable PostgreSQL harness with `npm run test:database`; do not point it at a real Supabase project. See [production configuration](docs/SUPABASE_PRODUCTION.md) before connecting a project.
+The validation project contains the reviewed base schema. Later changes are additive migrations; run the disposable PostgreSQL harness with `npm run test:database` before applying a new migration to Supabase. See [production configuration](docs/SUPABASE_PRODUCTION.md) before connecting a project.
 
 ## Quality checks
 

@@ -4,7 +4,9 @@ The pilot is for **Columbia, Missouri · October 7–12, 2026**. It deliberately
 
 ## 1. Apply the reviewed schema
 
-The validation project must be empty. In Supabase, open **SQL Editor**, create a new query, paste the complete contents of `supabase/migrations/20260824000100_initial_schema.sql`, and run it once. The migration is transactional.
+The `tripboard-validation` project already contains the base schema from `20260824000100_initial_schema.sql`. In Supabase, open **SQL Editor**, create a new query, paste the complete contents of `supabase/migrations/20260924000100_columbia_pilot_resources.sql`, and run it once. The upgrade is transactional and safe to rerun.
+
+For a brand-new empty project, apply every file in `supabase/migrations` in filename order instead.
 
 Do not run `supabase/tests/bootstrap.sql` or `supabase/tests/security.sql` against the hosted project. Those files create and delete test auth users and are only for the disposable PostgreSQL 16 CI database.
 
