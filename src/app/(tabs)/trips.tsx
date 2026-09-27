@@ -9,7 +9,6 @@ import { ActionButton, Card, Eyebrow, Heading, Pill, PreviewNotice, Screen } fro
 import { DestinationBackdrop } from '@/components/DestinationBackdrop';
 import { theme } from '@/constants/theme';
 import { listTrips, LiveTrip } from '@/data/live';
-import { previewTrip } from '@/data/preview';
 
 function formatDateRange(startDate: string | null, endDate: string | null): string {
   if (!startDate) return 'Dates to be added';
@@ -82,7 +81,7 @@ export default function TripsScreen() {
           <Eyebrow>YOUR TRIPS</Eyebrow>
           <Heading>Where to next?</Heading>
         </View>
-        <PreviewNotice label={isLive ? 'LIVE WORKSPACE' : 'PRODUCT PREVIEW'} />
+        <PreviewNotice label={isLive ? 'LIVE WORKSPACE' : 'SIGN-IN REQUIRED'} />
       </View>
 
       <ActionButton
@@ -125,34 +124,15 @@ export default function TripsScreen() {
         <Text style={styles.sectionLabel}>UPCOMING</Text>
         {isLive && isLoading ? <ActivityIndicator color={theme.colors.forest} /> : null}
         {!isLive ? (
-          <Pressable
-            onPress={() => router.push(`/trips/${previewTrip.id}`)}
-            style={({ pressed }) => pressed && styles.pressed}>
-            <Card style={styles.tripCard}>
-              <View style={styles.cover}>
-                <DestinationBackdrop
-                  compact
-                  location={previewTrip.location}
-                  title={previewTrip.title}
-                />
-                <Pill tone="white">{previewTrip.daysUntil} DAYS AWAY</Pill>
-              </View>
-              <View style={styles.tripCopy}>
-                <Text style={styles.tripTitle}>{previewTrip.title}</Text>
-                <Text style={styles.tripLocation}>{previewTrip.location}</Text>
-                <View style={styles.metaRow}>
-                  <View style={styles.metaItem}>
-                    <MaterialCommunityIcons color={theme.colors.muted} name="calendar-blank-outline" size={16} />
-                    <Text style={styles.metaText}>{previewTrip.dateRange}</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <MaterialCommunityIcons color={theme.colors.muted} name="account-multiple-outline" size={16} />
-                    <Text style={styles.metaText}>{previewTrip.travelerCount}</Text>
-                  </View>
-                </View>
-              </View>
-            </Card>
-          </Pressable>
+          <Card style={styles.signedOutCard}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="lock-outline" size={28} />
+            <View style={styles.errorCopy}>
+              <Text style={styles.emptyTitle}>No sample trip is standing in for your data</Text>
+              <Text style={styles.emptyText}>
+                Sign in to load the real Columbia trip and unlock travel, lodging, daily plans, essentials, and invitations.
+              </Text>
+            </View>
+          </Card>
         ) : null}
         {trips.map((trip) => {
           const countdown = daysUntil(trip.startDate);
@@ -231,5 +211,6 @@ const styles = StyleSheet.create({
   errorCopy: { flex: 1 },
   errorTitle: { color: theme.colors.danger, fontSize: 14, fontWeight: '800' },
   errorText: { color: theme.colors.ink, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  signedOutCard: { alignItems: 'center', backgroundColor: theme.colors.sage, flexDirection: 'row', gap: theme.spacing.md },
   pressed: { opacity: 0.78 },
 });

@@ -10,6 +10,7 @@ export type DestinationPhoto = {
   description: string;
   credit: string;
   license: string;
+  editorialLabel?: string;
 };
 
 type MetadataValue = { value?: string };
@@ -33,6 +34,66 @@ type CommonsResponse = {
 };
 
 const photoCache = new Map<string, Promise<DestinationPhoto[]>>();
+
+const columbiaEditorialSet: DestinationPhoto[] = [
+  {
+    id: 'columbia-faurot-tiger-stripe',
+    imageUrl:
+      'https://upload.wikimedia.org/wikipedia/commons/a/a6/2022_Faurot_Field_Tiger_Stripe.jpg',
+    sourceUrl:
+      'https://commons.wikimedia.org/wiki/File:2022_Faurot_Field_Tiger_Stripe.jpg',
+    description: 'A packed Faurot Field in the black-and-gold Tiger Stripe pattern',
+    credit: 'Esb5415',
+    license: 'CC BY 4.0',
+    editorialLabel: 'GAME-DAY ENERGY',
+  },
+  {
+    id: 'columbia-jesse-hall-pexels',
+    imageUrl:
+      'https://images.pexels.com/photos/12610210/pexels-photo-12610210.jpeg?auto=compress&cs=tinysrgb&w=2000',
+    sourceUrl: 'https://www.pexels.com/photo/jesse-hall-university-of-missouri-12610210/',
+    description: 'The Columns and Jesse Hall in warm afternoon light',
+    credit: 'Chris Duan · Pexels',
+    license: 'Pexels License',
+    editorialLabel: 'ICONIC COLUMBIA',
+  },
+  {
+    id: 'columbia-faurot-aerial',
+    imageUrl:
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Faurot_Field_Aerial.jpg/2560px-Faurot_Field_Aerial.jpg',
+    sourceUrl: 'https://commons.wikimedia.org/wiki/File:Faurot_Field_Aerial.jpg',
+    description: 'An aerial view of Faurot Field and the Mizzou campus',
+    credit: 'Lectrician2',
+    license: 'CC BY-SA 4.0',
+    editorialLabel: 'THE BIG PICTURE',
+  },
+  {
+    id: 'columbia-rock-bridge',
+    imageUrl:
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Rock_Bridge_Memorial_State_Park_-_53100349739.jpg/2560px-Rock_Bridge_Memorial_State_Park_-_53100349739.jpg',
+    sourceUrl:
+      'https://commons.wikimedia.org/wiki/File:Rock_Bridge_Memorial_State_Park_-_53100349739.jpg',
+    description: 'A green trail through Rock Bridge Memorial State Park',
+    credit: 'Ben Nickelson · Missouri State Parks',
+    license: 'Public Domain Mark',
+    editorialLabel: 'BEYOND THE STADIUM',
+  },
+];
+
+function getCuratedPhotos(location: string, tripTitle: string): DestinationPhoto[] | null {
+  const normalizedLocation = location.trim().toLowerCase();
+  if (/\bcolumbia\b/.test(normalizedLocation) && /\b(missouri|mo)\b/.test(normalizedLocation)) {
+    const isSportsTrip = /\b(game|football|stadium|mizzou|tigers?)\b/i.test(tripTitle);
+    if (isSportsTrip) return columbiaEditorialSet;
+    return [
+      columbiaEditorialSet[1],
+      columbiaEditorialSet[3],
+      columbiaEditorialSet[2],
+      columbiaEditorialSet[0],
+    ];
+  }
+  return null;
+}
 
 function stripMarkup(value: string | undefined): string {
   if (!value) return '';
@@ -91,6 +152,9 @@ async function searchCommons(query: string): Promise<DestinationPhoto[]> {
 }
 
 async function loadDestinationPhotos(location: string, tripTitle: string): Promise<DestinationPhoto[]> {
+  const curated = getCuratedPhotos(location, tripTitle);
+  if (curated) return curated;
+
   const unique = new Map<string, DestinationPhoto>();
   for (const query of getDestinationPhotoQueries(location, tripTitle)) {
     try {

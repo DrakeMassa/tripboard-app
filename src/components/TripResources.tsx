@@ -13,7 +13,7 @@ import {
   updateTripResource,
 } from '@/data/live';
 import { inferResourceProvider, normalizeExternalResourceUrl } from '@/domain/resources';
-import type { TripResourceKind, TripResourcePreview } from '@/types/trip';
+import type { TripResourceKind } from '@/types/trip';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -46,7 +46,6 @@ type DisplayResource = {
   detail: string;
   details: string;
   externalUrl: string | null;
-  isPlaceholder: boolean;
 };
 
 function toLiveDisplay(resource: LiveTripResource): DisplayResource {
@@ -58,27 +57,13 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
     detail: resource.details || resource.provider || 'Saved with this trip',
     details: resource.details ?? '',
     externalUrl: resource.externalUrl,
-    isPlaceholder: false,
   };
 }
 
-function toPreviewDisplay(resource: TripResourcePreview): DisplayResource {
-  return { ...resource, provider: '', details: resource.detail, isPlaceholder: true };
-}
-
-export function TripResources({
-  tripId,
-  previewResources,
-}: {
-  tripId: string;
-  previewResources?: TripResourcePreview[];
-}) {
+export function TripResources({ tripId }: { tripId: string }) {
   const { user } = useAuth();
-  const isPreview = Boolean(previewResources);
-  const [resources, setResources] = useState<DisplayResource[]>(
-    () => previewResources?.map(toPreviewDisplay) ?? [],
-  );
-  const [isLoading, setIsLoading] = useState(!isPreview);
+  const [resources, setResources] = useState<DisplayResource[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -92,7 +77,7 @@ export function TripResources({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isPreview || !user) return;
+    if (!user) return;
 
     let isMounted = true;
     void Promise.resolve().then(async () => {
@@ -114,7 +99,7 @@ export function TripResources({
     return () => {
       isMounted = false;
     };
-  }, [isPreview, tripId, user]);
+  }, [tripId, user]);
 
   const resetForm = () => {
     setKind('ticket');
@@ -248,49 +233,29 @@ export function TripResources({
                 </View>
                 <View style={styles.resourceStatus}>
                   <Text
-                    style={
-                      resource.externalUrl
-                        ? styles.linkedText
-                        : resource.isPlaceholder
-                          ? styles.needsDetailsText
-                          : styles.savedText
-                    }>
-                    {resource.externalUrl ? 'OPEN' : resource.isPlaceholder ? 'ADD DETAILS' : 'SAVED'}
+                    style={resource.externalUrl ? styles.linkedText : styles.savedText}>
+                    {resource.externalUrl ? 'OPEN' : 'SAVED'}
                   </Text>
                   <MaterialCommunityIcons
-                    color={
-                      resource.externalUrl
-                        ? theme.colors.forestSoft
-                        : resource.isPlaceholder
-                          ? theme.colors.coral
-                          : theme.colors.muted
-                    }
-                    name={
-                      resource.externalUrl
-                        ? 'open-in-new'
-                        : resource.isPlaceholder
-                          ? 'plus-circle-outline'
-                          : 'check-circle-outline'
-                    }
+                    color={resource.externalUrl ? theme.colors.forestSoft : theme.colors.muted}
+                    name={resource.externalUrl ? 'open-in-new' : 'check-circle-outline'}
                     size={18}
                   />
                 </View>
               </Pressable>
-              {!isPreview ? (
-                <Pressable
-                  accessibilityLabel={`Edit ${resource.title}`}
-                  accessibilityRole="button"
-                  onPress={() => startEditing(resource)}
-                  style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}>
-                  <MaterialCommunityIcons color={theme.colors.forest} name="pencil-outline" size={18} />
-                </Pressable>
-              ) : null}
+              <Pressable
+                accessibilityLabel={`Edit ${resource.title}`}
+                accessibilityRole="button"
+                onPress={() => startEditing(resource)}
+                style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}>
+                <MaterialCommunityIcons color={theme.colors.forest} name="pencil-outline" size={18} />
+              </Pressable>
             </View>
           ))}
         </Card>
       ) : null}
 
-      {!isLoading && !isPreview && resources.length === 0 ? (
+      {!isLoading && resources.length === 0 ? (
         <Card style={styles.emptyCard}>
           <MaterialCommunityIcons color={theme.colors.coral} name="ticket-confirmation-outline" size={28} />
           <View style={styles.flex}>
@@ -302,11 +267,11 @@ export function TripResources({
         </Card>
       ) : null}
 
-      {!isPreview && user && !isAdding ? (
+      {user && !isAdding ? (
         <ActionButton icon="plus" label="Add ticket, file, or link" onPress={startAdding} />
       ) : null}
 
-      {!isPreview && user && isAdding ? (
+      {user && isAdding ? (
         <Card style={styles.formCard}>
           <Text style={styles.formTitle}>{editingResource ? 'Edit trip item' : 'Add a trip item'}</Text>
           <View style={styles.kindRow}>
@@ -411,7 +376,6 @@ const styles = StyleSheet.create({
   resourceIcon: { alignItems: 'center', backgroundColor: theme.colors.sand, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
   resourceStatus: { alignItems: 'flex-end', gap: 5 },
   linkedText: { color: theme.colors.forestSoft, fontSize: 9, fontWeight: '900' },
-  needsDetailsText: { color: theme.colors.coral, fontSize: 9, fontWeight: '900' },
   savedText: { color: theme.colors.muted, fontSize: 9, fontWeight: '900' },
   itemTitle: { color: theme.colors.ink, fontSize: 14, fontWeight: '800' },
   itemMeta: { color: theme.colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },

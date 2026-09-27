@@ -2,11 +2,12 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Avatar, Card, Eyebrow, Heading, PreviewNotice, Screen, SectionTitle } from '@/components/design';
 import { theme } from '@/constants/theme';
+import { buildWebAuthCallbackUrl, getSafeInternalPath } from '@/domain/auth-redirect';
 import { isSupabaseConfigured, requireSupabase } from '@/lib/supabase';
 
 const checklist = [
@@ -17,7 +18,7 @@ const checklist = [
 ];
 
 export default function ProfileScreen() {
-  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
+  const { redirect } = useLocalSearchParams<{ redirect?: string | string[] }>();
   const { isLoading, user } = useAuth();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,11 +33,14 @@ export default function ProfileScreen() {
     setMessage(null);
     setError(null);
     try {
-      const redirectPath =
-        typeof redirect === 'string' && redirect.startsWith('/invite/') ? redirect : '/';
+      const redirectPath = getSafeInternalPath(redirect);
+      const callbackUrl =
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? buildWebAuthCallbackUrl(window.location.origin, redirectPath)
+          : Linking.createURL('/auth/callback', { queryParams: { next: redirectPath } });
       const { error: signInError } = await requireSupabase().auth.signInWithOtp({
         email: normalizedEmail,
-        options: { emailRedirectTo: Linking.createURL(redirectPath) },
+        options: { emailRedirectTo: callbackUrl },
       });
       if (signInError) throw signInError;
       setMessage(`Check ${normalizedEmail} for your secure Wanderly sign-in link.`);

@@ -16,6 +16,7 @@ export default function RootLayout() {
             headerShown: false,
           }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth/callback" />
           <Stack.Screen name="trips/[tripId]" />
           <Stack.Screen name="invite/[token]" />
         </Stack>

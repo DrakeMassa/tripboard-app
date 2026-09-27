@@ -69,6 +69,15 @@ export function DestinationBackdrop({
         </View>
       )}
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.vignetteTop]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.vignetteBottom]} />
+
+      {photo?.editorialLabel && !compact ? (
+        <View pointerEvents="none" style={styles.editorialBadge}>
+          <MaterialCommunityIcons color={theme.colors.white} name="creation-outline" size={11} />
+          <Text style={styles.editorialText}>WANDERLY EDIT · {photo.editorialLabel}</Text>
+        </View>
+      ) : null}
 
       {!compact && photos.length > 1 ? (
         <>
@@ -137,7 +146,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 170,
   },
-  scrim: { backgroundColor: 'rgba(8,28,20,0.48)' },
+  scrim: { backgroundColor: 'rgba(8,28,20,0.38)' },
+  vignetteTop: { backgroundColor: 'rgba(0,0,0,0.10)', bottom: '55%' },
+  vignetteBottom: { backgroundColor: 'rgba(4,18,12,0.22)', top: '48%' },
+  editorialBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.36)',
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 5,
+    left: 18,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    position: 'absolute',
+    top: 18,
+  },
+  editorialText: { color: theme.colors.white, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   previousButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.28)',

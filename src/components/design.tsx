@@ -141,7 +141,7 @@ export function Avatar({ initials, offset = false }: { initials: string; offset?
   );
 }
 
-export function PreviewNotice({ label = 'PRODUCT PREVIEW' }: { label?: string }) {
+export function PreviewNotice({ label = 'PILOT STATUS' }: { label?: string }) {
   return (
     <View style={styles.previewNotice}>
       <MaterialCommunityIcons color={theme.colors.coral} name="flask-outline" size={15} />

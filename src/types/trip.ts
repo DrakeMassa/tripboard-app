@@ -1,21 +1,3 @@
-export type TravelerArrival = {
-  id: string;
-  participantId: string;
-  name: string;
-  initials: string;
-  route: string;
-  arrivalTime: string;
-  status: 'on-time' | 'later' | 'missing';
-};
-
-export type ItineraryItem = {
-  id: string;
-  time: string;
-  title: string;
-  detail: string;
-  category: 'travel' | 'food' | 'stay' | 'activity';
-};
-
 export type TripResourceKind =
   | 'ticket'
   | 'confirmation'
@@ -27,28 +9,6 @@ export type TripResourceKind =
   | 'other';
 
 export type TravelKind = 'flight' | 'train' | 'car' | 'ferry' | 'bus' | 'other';
-
-export type TripResourcePreview = {
-  id: string;
-  itineraryItemId: string | null;
-  kind: TripResourceKind;
-  title: string;
-  detail: string;
-  externalUrl: string | null;
-};
-
-export type TripPreview = {
-  id: string;
-  title: string;
-  location: string;
-  dateRange: string;
-  travelerCount: number;
-  daysUntil: number;
-  baseCurrency: string;
-  arrivals: TravelerArrival[];
-  itinerary: ItineraryItem[];
-  resources: TripResourcePreview[];
-};
 
 export type ClipPreview = {
   id: string;
