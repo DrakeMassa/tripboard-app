@@ -4,6 +4,8 @@ Wanderly should reduce trip administration rather than create another place to r
 
 ## Recommended integration order
 
+The selected pilot stack is **Resend inbound email → Supabase Edge Function → review queue**, **Google/Microsoft calendar OAuth**, and **FlightAware AeroAPI behind a server-only Edge Function**. Google Maps uses a separately restricted browser key. Airline and hotel passwords are never collected.
+
 ### 1. Forwarded confirmation email
 
 This is the broadest first integration because airlines, hotels, rental cars, restaurants, and ticket providers all send confirmations even when they do not offer a usable consumer API.
@@ -17,6 +19,8 @@ This is the broadest first integration because airlines, hotels, rental cars, re
 - Preserve the original source and extraction confidence for correction and auditability.
 
 The address must not act as a secret by itself. Rate limiting, sender verification, malware scanning, attachment limits, and idempotency are required before enabling it outside the pilot.
+
+For the pilot, use Resend inbound webhooks because the received message arrives as structured data and attachments can be fetched separately. The webhook must verify its signature before passing the payload to a Supabase Edge Function. Create a per-account alias such as `drake+<revocable-token>@trips.wanderly.app`; do not expose a service-role key to the Expo client.
 
 ### 2. Calendar connection
 
@@ -46,6 +50,20 @@ There is no single reliable consumer API across airlines and hotels. Wanderly sh
 - Let the operating system open Apple Wallet, Google Wallet, an airline app, or a ticketing app when supported.
 - Support private PDF/image/pass attachments only after the private Storage bucket, signed URLs, retention rules, and malware controls are deployed.
 - Never scrape credentials or ask users to share airline or hotel passwords.
+
+### 5. Live flight and gate enrichment
+
+After an itinerary is approved, resolve the carrier, flight number, and departure date through FlightAware AeroAPI from a server-side Edge Function. Store the provider flight ID and last refresh time, then update scheduled/estimated/actual times, cancellation state, terminal, gate, baggage claim, route, and track only when the provider returns them. Gate assignments are often not published until close to departure, so the UI must show `Live gate pending` rather than inventing a gate.
+
+Use push alerts close to the trip and conservative polling outside the travel window. The AeroAPI key is a secret and must never use an `EXPO_PUBLIC_` name.
+
+### 6. Maps, indoor airports, and videos
+
+- The web pilot uses Maps JavaScript API with Places API (New) for category pins, live ratings, review counts, addresses, and Google directions.
+- The browser key is intentionally visible but must be restricted by HTTPS referrer and API. Use separate keys for web, iOS, Android, and server workloads.
+- Airport interiors use the airport's licensed map when available. CLT's official map supports multi-level routing, walk-time estimates, gates, food, shops, and lounges; Wanderly overlays the saved flights and live gates when published.
+- A universal rotatable 360-degree terminal model is not available through one public API. Add it airport-by-airport only where a venue provides licensed indoor geometry or panoramas.
+- Play permitted YouTube embeds and first-party video directly in Wanderly. Do not download, re-host, or scrape Instagram/TikTok video; use an official embed where supported and a source link otherwise.
 
 ## Destination imagery and preferences
 

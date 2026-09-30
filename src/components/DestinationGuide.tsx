@@ -3,6 +3,8 @@ import { ComponentProps, useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Pill, SectionTitle } from '@/components/design';
+import { DestinationMap } from '@/components/DestinationMap';
+import { EmbeddedVideoFeed } from '@/components/EmbeddedVideoFeed';
 import { theme } from '@/constants/theme';
 import {
   getDestinationGuide,
@@ -26,16 +28,6 @@ const sectionIcons: Record<GuideSectionId, IconName> = {
   practical: 'information-outline',
   'fun-facts': 'lightbulb-on-outline',
 };
-
-const areaAnchors = {
-  campus: { left: 51, top: 59 },
-  downtown: { left: 42, top: 38 },
-  arcade: { left: 67, top: 31 },
-  south: { left: 62, top: 76 },
-  west: { left: 20, top: 55 },
-  nature: { left: 45, top: 87 },
-  river: { left: 18, top: 86 },
-} as const;
 
 function googleMapsUrl(item: GuideRecommendation): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${item.name}, Columbia, Missouri`)}`;
@@ -169,33 +161,12 @@ export function DestinationGuide({ location }: { location: string | null | undef
           </View>
           {mappable.length ? (
             <>
-              <View style={styles.mapCanvas}>
-                <View style={[styles.road, styles.roadHorizontal]} />
-                <View style={[styles.road, styles.roadVertical]} />
-                <View style={[styles.road, styles.roadDiagonal]} />
-                <Text style={[styles.areaLabel, { left: '34%', top: '22%' }]}>DOWNTOWN</Text>
-                <Text style={[styles.areaLabel, { left: '48%', top: '64%' }]}>CAMPUS</Text>
-                <Text style={[styles.areaLabel, { left: '67%', top: '17%' }]}>ARCADE</Text>
-                <Text style={[styles.areaLabel, { left: '12%', top: '67%' }]}>WEST</Text>
-                {mappable.map((item, index) => {
-                  const anchor = areaAnchors[item.mapArea as keyof typeof areaAnchors];
-                  const isSelected = item.id === selectedMapItem?.id;
-                  const shift = (index % 3) * 7;
-                  return (
-                    <Pressable
-                      accessibilityLabel={`Show ${item.name} on the area map`}
-                      key={item.id}
-                      onPress={() => setSelectedMapId(item.id)}
-                      style={[
-                        styles.mapPin,
-                        { left: `${Math.min(86, anchor.left + shift)}%`, top: `${Math.min(88, anchor.top + shift / 2)}%` },
-                        isSelected && styles.mapPinSelected,
-                      ]}>
-                      <MaterialCommunityIcons color={isSelected ? theme.colors.white : theme.colors.forest} name={sectionIcons[item.section]} size={18} />
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <DestinationMap
+                destination={guide.destination}
+                items={mappable}
+                onSelect={setSelectedMapId}
+                selectedId={selectedMapItem?.id ?? null}
+              />
               {selectedMapItem ? (
                 <Card style={styles.mapSelection}>
                   <View style={styles.flex}>
@@ -223,24 +194,9 @@ export function DestinationGuide({ location }: { location: string | null | undef
           </View>
           <MaterialCommunityIcons color={theme.colors.coral} name="play-box-multiple-outline" size={25} />
         </View>
-        <View style={styles.videoGrid}>
-          {guide.videos.map((video) => (
-            <Pressable
-              accessibilityRole="link"
-              key={video.id}
-              onPress={() => void openUrl(video.url)}
-              style={({ pressed }) => [styles.videoCard, pressed && styles.pressed]}>
-              <View style={styles.videoPlay}>
-                <MaterialCommunityIcons color={theme.colors.white} name="play" size={20} />
-              </View>
-              <Text style={styles.videoLabel}>{video.label}</Text>
-              <Text style={styles.videoTitle}>{video.title}</Text>
-              <Text style={styles.videoCreator}>{video.creator}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <EmbeddedVideoFeed videos={guide.videos} />
       </View>
-      <Text style={styles.footerNote}>Official pages ground the edit; Google Maps opens separately for live ratings and review counts so Wanderly never freezes an outdated score.</Text>
+      <Text style={styles.footerNote}>Official pages ground the edit. The connected Google map supplies current ratings, review counts, photos, hours, and directions instead of freezing stale place data.</Text>
     </View>
   );
 }
@@ -280,25 +236,11 @@ const styles = StyleSheet.create({
   mapSection: { gap: theme.spacing.md },
   mapHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: theme.spacing.md, justifyContent: 'space-between' },
   mapHelper: { color: theme.colors.muted, fontSize: 10, lineHeight: 15, marginTop: 4, maxWidth: 430 },
-  mapCanvas: { backgroundColor: '#e5eadf', borderColor: theme.colors.line, borderRadius: theme.radius.lg, borderWidth: 1, height: 300, overflow: 'hidden', position: 'relative' },
-  road: { backgroundColor: 'rgba(255,255,255,0.92)', borderColor: 'rgba(33,70,54,0.10)', borderWidth: 1, position: 'absolute' },
-  roadHorizontal: { height: 17, left: '-5%', top: '45%', transform: [{ rotate: '-8deg' }], width: '110%' },
-  roadVertical: { height: '115%', left: '52%', top: '-8%', transform: [{ rotate: '12deg' }], width: 14 },
-  roadDiagonal: { height: 12, left: '-10%', top: '70%', transform: [{ rotate: '22deg' }], width: '125%' },
-  areaLabel: { color: 'rgba(33,70,54,0.48)', fontSize: 8, fontWeight: '900', letterSpacing: 1, position: 'absolute' },
-  mapPin: { alignItems: 'center', backgroundColor: theme.colors.white, borderColor: theme.colors.forest, borderRadius: theme.radius.pill, borderWidth: 2, height: 38, justifyContent: 'center', marginLeft: -19, marginTop: -19, position: 'absolute', width: 38, ...theme.shadow },
-  mapPinSelected: { backgroundColor: theme.colors.coral, borderColor: theme.colors.coral, transform: [{ scale: 1.13 }] },
   mapSelection: { borderColor: theme.colors.coral, flexDirection: 'row' },
   mapEmpty: { alignItems: 'center', backgroundColor: theme.colors.sand, flexDirection: 'row', gap: theme.spacing.md },
   videoSection: { backgroundColor: theme.colors.sand, borderRadius: theme.radius.lg, gap: theme.spacing.md, padding: theme.spacing.lg },
   videoHeadingRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   videoHeading: { color: theme.colors.ink, fontFamily: 'serif', fontSize: 18, fontWeight: '800', marginTop: 3 },
-  videoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md },
-  videoCard: { backgroundColor: theme.colors.forest, borderRadius: theme.radius.md, flexBasis: 180, flexGrow: 1, minHeight: 150, padding: theme.spacing.md },
-  videoPlay: { alignItems: 'center', backgroundColor: theme.colors.coral, borderRadius: theme.radius.pill, height: 36, justifyContent: 'center', marginBottom: theme.spacing.md, width: 36 },
-  videoLabel: { color: theme.colors.sage, fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
-  videoTitle: { color: theme.colors.white, fontFamily: 'serif', fontSize: 16, fontWeight: '800', lineHeight: 20, marginTop: 5 },
-  videoCreator: { color: theme.colors.sage, fontSize: 9, lineHeight: 13, marginTop: 6 },
   footerNote: { color: theme.colors.muted, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   pressed: { opacity: 0.74 },
 });

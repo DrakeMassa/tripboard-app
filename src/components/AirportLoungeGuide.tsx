@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AirportMap } from '@/components/AirportMap';
 import { Card, Pill } from '@/components/design';
 import { theme } from '@/constants/theme';
 import { LiveTravelSegment } from '@/data/live';
@@ -17,6 +18,8 @@ export function AirportLoungeGuide({ travel }: { travel: LiveTravelSegment[] }) 
   if (arrivingIndex < 0) return null;
 
   const layover = getLayoverMinutes(sorted[arrivingIndex], sorted[arrivingIndex + 1]);
+  const arrivingFlight = [sorted[arrivingIndex].provider, sorted[arrivingIndex].serviceNumber].filter(Boolean).join(' · ');
+  const departingFlight = [sorted[arrivingIndex + 1].provider, sorted[arrivingIndex + 1].serviceNumber].filter(Boolean).join(' · ');
 
   return (
     <Card style={styles.card}>
@@ -30,6 +33,7 @@ export function AirportLoungeGuide({ travel }: { travel: LiveTravelSegment[] }) 
         </View>
         {layover !== null ? <Pill tone="coral">{formatDuration(layover)}</Pill> : null}
       </View>
+      <AirportMap arrivingFlight={arrivingFlight} departingFlight={departingFlight} />
       <Text style={styles.copy}>
         The Club CLT is in Concourse A near gates A21–A22. Your Capital One Venture X can provide Priority Pass access after enrollment; Chase Sapphire Preferred does not add airport-lounge access.
       </Text>

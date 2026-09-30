@@ -27,6 +27,8 @@ export type GuideVideo = {
   creator: string;
   label: string;
   url: string;
+  provider: 'youtube';
+  embedId: string;
 };
 
 export type DestinationGuide = {
@@ -339,25 +341,31 @@ const columbiaGuide: DestinationGuide = {
   ],
   videos: [
     {
-      id: 'visit-columbia-reels',
-      title: 'See what Columbia looks like right now',
-      creator: '@VisitColumbiaMO · official tourism account',
-      label: 'LOCAL REELS',
-      url: 'https://www.instagram.com/visitcolumbiamo/reels/',
+      id: 'faurot-field-mini-movie',
+      title: 'Faurot Field mini movie',
+      creator: 'Mizzou Athletics · official YouTube',
+      label: 'STADIUM STORY',
+      url: 'https://www.youtube.com/watch?v=YcWXvJbkAK0',
+      provider: 'youtube',
+      embedId: 'YcWXvJbkAK0',
     },
     {
-      id: 'mizzou-stadium-video',
-      title: 'Preview the new Memorial Stadium era',
+      id: 'mizzou-game-day',
+      title: 'A game day in Columbia',
       creator: 'Mizzou Athletics · official YouTube',
       label: 'GAME WEEKEND',
-      url: 'https://www.youtube.com/@MizzouAthleticsOfficial',
+      url: 'https://www.youtube.com/watch?v=vDQlqdtG8ms',
+      provider: 'youtube',
+      embedId: 'vDQlqdtG8ms',
     },
     {
-      id: 'visit-columbia-fall',
-      title: 'Build a fall-weekend shortlist',
-      creator: 'Visit Columbia MO · current fall guide',
-      label: 'SEASONAL IDEAS',
-      url: 'https://www.visitcolumbiamo.com/family-fun/the-ultimate-guide-to-fall-in-columbia/',
+      id: 'mizzou-brightside',
+      title: 'Mr. Brightside at Faurot Field',
+      creator: 'Mizzou Athletics · official YouTube',
+      label: 'CROWD ENERGY',
+      url: 'https://www.youtube.com/watch?v=MQ5tCdfyEcM',
+      provider: 'youtube',
+      embedId: 'MQ5tCdfyEcM',
     },
   ],
 };
