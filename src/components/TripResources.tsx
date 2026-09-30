@@ -60,11 +60,11 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
   };
 }
 
-export function TripResources({ tripId }: { tripId: string }) {
+export function TripResources({ initialOpen = false, tripId }: { initialOpen?: boolean; tripId: string }) {
   const { user } = useAuth();
   const [resources, setResources] = useState<DisplayResource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
+  const [isAdding, setIsAdding] = useState(initialOpen);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);

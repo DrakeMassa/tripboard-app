@@ -11,7 +11,9 @@ import {
   View,
 } from 'react-native';
 
+import { AirportLoungeGuide } from '@/components/AirportLoungeGuide';
 import { ActionButton, Card, SectionTitle } from '@/components/design';
+import { SmartTravelImport } from '@/components/SmartTravelImport';
 import { theme } from '@/constants/theme';
 import {
   createAccommodation,
@@ -32,6 +34,12 @@ import {
 } from '@/data/live';
 import { buildCalendarFile, calendarFileName, CalendarEvent } from '@/domain/calendar';
 import { normalizeExternalResourceUrl } from '@/domain/resources';
+import {
+  flightTrackerUrl,
+  formatAirportMoment,
+  formatDuration,
+  getLayoverMinutes,
+} from '@/domain/travel-itinerary';
 import {
   getDeviceTimeZone,
   isoToLocalDateTimeInput,
@@ -571,11 +579,22 @@ function ItineraryForm({
   );
 }
 
-export function TripPlanManager({ tripId, tripLocation }: { tripId: string; tripLocation?: string | null }) {
+export function TripPlanManager({
+  initialTravelOpen = false,
+  onOpenEssentials,
+  tripId,
+  tripLocation,
+}: {
+  initialTravelOpen?: boolean;
+  onOpenEssentials?: () => void;
+  tripId: string;
+  tripLocation?: string | null;
+}) {
   const [travel, setTravel] = useState<LiveTravelSegment[]>([]);
   const [stays, setStays] = useState<LiveAccommodation[]>([]);
   const [itinerary, setItinerary] = useState<LiveItineraryItem[]>([]);
   const [showTravelForm, setShowTravelForm] = useState(false);
+  const [showTravelImport, setShowTravelImport] = useState(initialTravelOpen);
   const [showStayForm, setShowStayForm] = useState(false);
   const [showItineraryForm, setShowItineraryForm] = useState(false);
   const [editingTravel, setEditingTravel] = useState<LiveTravelSegment | null>(null);
@@ -630,6 +649,8 @@ export function TripPlanManager({ tripId, tripLocation }: { tripId: string; trip
     }
   };
 
+  const orderedTravel = [...travel].sort((a, b) => a.departsAt.localeCompare(b.departsAt));
+
   if (isLoading) {
     return (
       <Card style={styles.loadingCard}>
@@ -647,46 +668,74 @@ export function TripPlanManager({ tripId, tripLocation }: { tripId: string; trip
         <SectionTitle action={`${travel.length} saved`}>Travel</SectionTitle>
         {travel.length ? (
           <Card style={styles.flatCard}>
-            {travel.map((item, index) => (
-              <View key={item.id} style={[styles.row, index > 0 && styles.divider]}>
-                <View style={styles.itemIcon}>
-                  <MaterialCommunityIcons color={theme.colors.forest} name={travelIcons[item.kind]} size={20} />
+            {orderedTravel.map((item, index) => {
+              const trackerUrl = item.kind === 'flight' ? flightTrackerUrl(item.serviceNumber) : null;
+              const layover = getLayoverMinutes(item, orderedTravel[index + 1]);
+              return (
+                <View key={item.id}>
+                  <View style={[styles.travelRow, index > 0 && styles.divider]}>
+                    <View style={styles.itemIcon}>
+                      <MaterialCommunityIcons color={theme.colors.forest} name={travelIcons[item.kind]} size={20} />
+                    </View>
+                    <View style={styles.flex}>
+                      <View style={styles.routeTopLine}>
+                        <Text style={styles.airportCode}>{item.departurePlace}</Text>
+                        <View style={styles.routeLine}>
+                          <View style={styles.routeDot} />
+                          <View style={styles.routeStroke} />
+                          <MaterialCommunityIcons color={theme.colors.coral} name="airplane" size={15} />
+                          <View style={styles.routeStroke} />
+                          <View style={styles.routeDot} />
+                        </View>
+                        <Text style={styles.airportCode}>{item.arrivalPlace}</Text>
+                      </View>
+                      <Text style={styles.itemMetaStrong}>
+                        {[item.provider, item.serviceNumber].filter(Boolean).join(' · ') || travelKinds.find((option) => option.kind === item.kind)?.label}
+                      </Text>
+                      <View style={styles.timeRow}>
+                        <Text style={styles.itemMeta}>{formatAirportMoment(item.departsAt, item.departurePlace)}</Text>
+                        <Text style={styles.timeArrow}>→</Text>
+                        <Text style={styles.itemMeta}>{formatAirportMoment(item.arrivesAt, item.arrivalPlace)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.rowActions}>
+                      {trackerUrl ? (
+                        <IconAction label={`Track ${item.serviceNumber ?? 'flight'}`} name="radar" onPress={() => void openSafeLink(trackerUrl)} />
+                      ) : null}
+                      <IconAction
+                        label="Add travel to calendar"
+                        name="calendar-plus"
+                        onPress={() =>
+                          void exportCalendar({
+                            uid: `travel-${item.id}`,
+                            title: `${item.provider || 'Travel'} ${item.serviceNumber || ''}: ${item.departurePlace} to ${item.arrivalPlace}`.trim(),
+                            description: item.notes,
+                            location: item.departurePlace,
+                            start: item.departsAt,
+                            end: item.arrivesAt,
+                          })
+                        }
+                      />
+                      <IconAction
+                        label="Edit travel"
+                        name="pencil-outline"
+                        onPress={() => {
+                          setEditingTravel(item);
+                          setShowTravelImport(false);
+                          setShowTravelForm(true);
+                        }}
+                      />
+                    </View>
+                  </View>
+                  {layover !== null ? (
+                    <View style={styles.layoverRow}>
+                      <MaterialCommunityIcons color={theme.colors.coral} name="clock-outline" size={16} />
+                      <Text style={styles.layoverText}>{formatDuration(layover)} layover in {item.arrivalPlace}</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <View style={styles.flex}>
-                  <Text style={styles.itemTitle}>
-                    {item.departurePlace} → {item.arrivalPlace}
-                  </Text>
-                  <Text style={styles.itemMeta}>
-                    {[item.provider, item.serviceNumber].filter(Boolean).join(' · ') || travelKinds.find((option) => option.kind === item.kind)?.label}
-                  </Text>
-                  <Text style={styles.itemMeta}>{formatMoment(item.departsAt)}</Text>
-                </View>
-                <View style={styles.rowActions}>
-                  <IconAction
-                    label="Add travel to calendar"
-                    name="calendar-plus"
-                    onPress={() =>
-                      void exportCalendar({
-                        uid: `travel-${item.id}`,
-                        title: `${item.provider || 'Travel'} ${item.serviceNumber || ''}: ${item.departurePlace} to ${item.arrivalPlace}`.trim(),
-                        description: item.notes,
-                        location: item.departurePlace,
-                        start: item.departsAt,
-                        end: item.arrivesAt,
-                      })
-                    }
-                  />
-                  <IconAction
-                    label="Edit travel"
-                    name="pencil-outline"
-                    onPress={() => {
-                      setEditingTravel(item);
-                      setShowTravelForm(true);
-                    }}
-                  />
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </Card>
         ) : (
           <Card style={styles.emptyCard}>
@@ -697,17 +746,24 @@ export function TripPlanManager({ tripId, tripLocation }: { tripId: string; trip
             </View>
           </Card>
         )}
-        {!showTravelForm ? (
-          <ActionButton
-            icon="plus"
-            label="Add travel"
-            onPress={() => {
+        <AirportLoungeGuide travel={orderedTravel} />
+        {showTravelImport ? (
+          <SmartTravelImport
+            existingTravel={orderedTravel}
+            onCancel={() => setShowTravelImport(false)}
+            onImported={(saved) => {
+              setTravel((current) => [...current, ...saved].sort((a, b) => a.departsAt.localeCompare(b.departsAt)));
+              setShowTravelImport(false);
+            }}
+            onManual={() => {
+              setShowTravelImport(false);
               setEditingTravel(null);
               setShowTravelForm(true);
             }}
-            secondary
+            tripId={tripId}
+            tripLocation={tripLocation}
           />
-        ) : (
+        ) : showTravelForm ? (
           <TravelForm
             item={editingTravel}
             onCancel={() => setShowTravelForm(false)}
@@ -721,7 +777,43 @@ export function TripPlanManager({ tripId, tripLocation }: { tripId: string; trip
             }}
             tripId={tripId}
           />
+        ) : (
+          <View style={styles.actions}>
+            <View style={styles.column}>
+              <ActionButton
+                icon="creation-outline"
+                label="Import itinerary"
+                onPress={() => {
+                  setEditingTravel(null);
+                  setShowTravelImport(true);
+                }}
+              />
+            </View>
+            <View style={styles.column}>
+              <ActionButton
+                icon="plus"
+                label="Add manually"
+                onPress={() => {
+                  setEditingTravel(null);
+                  setShowTravelForm(true);
+                }}
+                secondary
+              />
+            </View>
+          </View>
         )}
+        {travel.length && onOpenEssentials ? (
+          <Pressable accessibilityRole="button" onPress={onOpenEssentials} style={({ pressed }) => pressed && styles.pressed}>
+            <Card style={styles.boardingPassCard}>
+              <MaterialCommunityIcons color={theme.colors.coral} name="ticket-confirmation-outline" size={23} />
+              <View style={styles.flex}>
+                <Text style={styles.itemTitle}>Keep the live boarding pass one tap away</Text>
+                <Text style={styles.itemMeta}>Save the airline’s secure link under Trip essentials so it opens from this trip.</Text>
+              </View>
+              <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={22} />
+            </Card>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -906,12 +998,23 @@ const styles = StyleSheet.create({
   loadingCard: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md },
   flatCard: { paddingVertical: 4 },
   row: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 14 },
+  travelRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 16 },
   divider: { borderTopColor: theme.colors.line, borderTopWidth: 1 },
   itemIcon: { alignItems: 'center', backgroundColor: theme.colors.sand, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
   itemTitle: { color: theme.colors.ink, fontSize: 14, fontWeight: '800' },
+  itemMetaStrong: { color: theme.colors.ink, fontSize: 11, fontWeight: '800', marginTop: 7 },
   itemMeta: { color: theme.colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   flex: { flex: 1 },
   rowActions: { flexDirection: 'row', gap: 6 },
+  routeTopLine: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm },
+  airportCode: { color: theme.colors.forest, fontFamily: 'serif', fontSize: 20, fontWeight: '900' },
+  routeLine: { alignItems: 'center', flex: 1, flexDirection: 'row', minWidth: 72 },
+  routeDot: { backgroundColor: theme.colors.forest, borderRadius: theme.radius.pill, height: 6, width: 6 },
+  routeStroke: { backgroundColor: theme.colors.line, flex: 1, height: 1 },
+  timeRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  timeArrow: { color: theme.colors.coral, fontSize: 11, fontWeight: '900', marginTop: 3 },
+  layoverRow: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: theme.colors.coralSoft, borderRadius: theme.radius.pill, flexDirection: 'row', gap: 6, marginBottom: 10, marginLeft: 56, paddingHorizontal: 10, paddingVertical: 6 },
+  layoverText: { color: theme.colors.coral, fontSize: 10, fontWeight: '900' },
   iconAction: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.pill, height: 36, justifyContent: 'center', width: 36 },
   emptyCard: { alignItems: 'center', backgroundColor: theme.colors.sand, flexDirection: 'row', gap: theme.spacing.md },
   formCard: { gap: theme.spacing.md },
@@ -932,4 +1035,5 @@ const styles = StyleSheet.create({
   error: { color: theme.colors.danger, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   pressed: { opacity: 0.72 },
   calendarNote: { alignItems: 'center', backgroundColor: theme.colors.sage, flexDirection: 'row', gap: theme.spacing.md },
+  boardingPassCard: { alignItems: 'center', backgroundColor: theme.colors.coralSoft, flexDirection: 'row', gap: theme.spacing.md },
 });

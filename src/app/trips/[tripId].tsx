@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Avatar, Card, Pill, PreviewNotice, RoundIcon, Screen } from '@/components/design';
@@ -43,6 +43,24 @@ export default function TripDetailScreen() {
   const [isEditingTrip, setIsEditingTrip] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openTravelRequest, setOpenTravelRequest] = useState(0);
+  const [openEssentialsRequest, setOpenEssentialsRequest] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const travelOffset = useRef(0);
+  const essentialsOffset = useRef(0);
+
+  const goHome = () => router.replace('/');
+  const scrollTo = (offset: number) => {
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ animated: true, y: Math.max(0, offset - 12) }));
+  };
+  const openTravel = () => {
+    setOpenTravelRequest((current) => current + 1);
+    scrollTo(travelOffset.current);
+  };
+  const openEssentials = () => {
+    setOpenEssentialsRequest((current) => current + 1);
+    scrollTo(essentialsOffset.current);
+  };
 
   useEffect(() => {
     if (!tripId || !user) {
@@ -72,10 +90,10 @@ export default function TripDetailScreen() {
 
   if (isAuthLoading || isLoading) {
     return (
-      <Screen>
+      <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-            <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
+          <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
           <View style={styles.backButton} />
@@ -90,10 +108,10 @@ export default function TripDetailScreen() {
 
   if (!user || error || !liveTrip) {
     return (
-      <Screen>
+      <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-            <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
+          <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
           <View style={styles.backButton} />
@@ -124,10 +142,10 @@ export default function TripDetailScreen() {
   const countdown = getDaysUntil(liveTrip.startDate);
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <View style={styles.topBar}>
-        <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-          <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
+        <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
+          <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
         </Pressable>
         <PreviewNotice label="LIVE TRIP" />
         <Pressable
@@ -179,21 +197,49 @@ export default function TripDetailScreen() {
       ) : null}
 
       <View style={styles.summaryGrid}>
-        <Card style={styles.summaryCard}>
-          <RoundIcon name="airplane-landing" />
-          <Text style={styles.summaryValue}>Travel to add</Text>
-          <Text style={styles.summaryLabel}>Arrival and return</Text>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
-          <Text style={styles.summaryValue}>Trip essentials</Text>
-          <Text style={styles.summaryLabel}>Tickets, files, and links</Text>
-        </Card>
+        <Pressable
+          accessibilityHint="Opens the itinerary importer"
+          accessibilityRole="button"
+          onPress={openTravel}
+          style={({ pressed }) => [styles.summaryPressable, pressed && styles.pressed]}>
+          <Card style={styles.summaryCard}>
+            <RoundIcon name="airplane-landing" />
+            <Text style={styles.summaryValue}>Travel to add</Text>
+            <Text style={styles.summaryLabel}>Tap to add arrival, connections, and return</Text>
+            <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={20} style={styles.summaryChevron} />
+          </Card>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Opens tickets, boarding passes, files, and links"
+          accessibilityRole="button"
+          onPress={openEssentials}
+          style={({ pressed }) => [styles.summaryPressable, pressed && styles.pressed]}>
+          <Card style={styles.summaryCard}>
+            <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
+            <Text style={styles.summaryValue}>Trip essentials</Text>
+            <Text style={styles.summaryLabel}>Tap for tickets, boarding passes, and links</Text>
+            <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={20} style={styles.summaryChevron} />
+          </Card>
+        </Pressable>
       </View>
 
-      <TripPlanManager tripId={tripId} tripLocation={liveTrip.location} />
+      <View onLayout={(event) => { travelOffset.current = event.nativeEvent.layout.y; }}>
+        <TripPlanManager
+          initialTravelOpen={openTravelRequest > 0}
+          key={`travel-${openTravelRequest}`}
+          onOpenEssentials={openEssentials}
+          tripId={tripId}
+          tripLocation={liveTrip.location}
+        />
+      </View>
 
-      <TripResources tripId={tripId} />
+      <View onLayout={(event) => { essentialsOffset.current = event.nativeEvent.layout.y; }}>
+        <TripResources
+          initialOpen={openEssentialsRequest > 0}
+          key={`essentials-${openEssentialsRequest}`}
+          tripId={tripId}
+        />
+      </View>
 
       <DestinationGuide location={liveTrip.location} />
     </Screen>
@@ -212,9 +258,12 @@ const styles = StyleSheet.create({
   heroActions: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   avatarRow: { flexDirection: 'row' },
   summaryGrid: { flexDirection: 'row', gap: theme.spacing.md },
-  summaryCard: { flex: 1, gap: theme.spacing.sm },
+  summaryPressable: { flex: 1 },
+  summaryCard: { flex: 1, gap: theme.spacing.sm, minHeight: 164, position: 'relative' },
+  summaryChevron: { position: 'absolute', right: theme.spacing.md, top: theme.spacing.md },
   summaryValue: { color: theme.colors.ink, fontSize: 15, fontWeight: '800', marginTop: 3 },
-  summaryLabel: { color: theme.colors.muted, fontSize: 11 },
+  summaryLabel: { color: theme.colors.muted, fontSize: 11, lineHeight: 16 },
+  pressed: { opacity: 0.72 },
   section: { gap: theme.spacing.md },
   flatCard: { paddingVertical: 4 },
   arrivalRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 14 },

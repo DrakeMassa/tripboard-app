@@ -452,6 +452,50 @@ export async function createTravelSegment(input: {
   return mapTravel(data as TravelRow);
 }
 
+export async function createTravelSegments(input: {
+  tripId: string;
+  segments: {
+    kind: TravelKind;
+    provider?: string | null;
+    serviceNumber?: string | null;
+    departurePlace: string;
+    arrivalPlace: string;
+    departsAt: string;
+    arrivesAt?: string | null;
+    timeZone: string;
+    notes?: string | null;
+  }[];
+}): Promise<LiveTravelSegment[]> {
+  if (!input.segments.length) return [];
+  const userId = await getAuthenticatedUserId();
+  const participantId = await getCurrentParticipantId(input.tripId, userId);
+  const rows = input.segments.map((segment) => ({
+    trip_id: input.tripId,
+    participant_id: participantId,
+    created_by: userId,
+    kind: segment.kind,
+    provider: segment.provider?.trim() || null,
+    service_number: segment.serviceNumber?.trim() || null,
+    departure_place: segment.departurePlace.trim(),
+    arrival_place: segment.arrivalPlace.trim(),
+    departs_at: segment.departsAt,
+    arrives_at: segment.arrivesAt || null,
+    departure_time_zone: segment.timeZone,
+    arrival_time_zone: segment.timeZone,
+    notes: segment.notes?.trim() || null,
+  }));
+  const { data, error } = await requireSupabase()
+    .from('travel_segments')
+    .insert(rows)
+    .select(
+      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,notes',
+    );
+  if (error) throw error;
+  return ((data ?? []) as TravelRow[])
+    .map(mapTravel)
+    .sort((a, b) => a.departsAt.localeCompare(b.departsAt));
+}
+
 export async function updateTravelSegment(input: {
   id: string;
   kind: TravelKind;
