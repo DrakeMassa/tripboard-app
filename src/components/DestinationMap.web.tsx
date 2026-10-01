@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/constants/theme';
 import type { GuideRecommendation, GuideSectionId } from '@/data/destination-guides';
+import { googleMapsApiEnabled } from '@/domain/map-provider';
 
 type LatLngLiteral = { lat: number; lng: number };
 
@@ -91,6 +92,16 @@ const sectionGlyphs: Record<GuideSectionId, string> = {
 
 let mapsPromise: Promise<GoogleMapsNamespace> | null = null;
 
+const mapAreaCenters: Record<NonNullable<GuideRecommendation['mapArea']>, LatLngLiteral> = {
+  campus: { lat: 38.9359, lng: -92.3332 },
+  downtown: { lat: 38.9517, lng: -92.3341 },
+  arcade: { lat: 38.9571, lng: -92.3262 },
+  south: { lat: 38.907, lng: -92.334 },
+  west: { lat: 38.958, lng: -92.392 },
+  nature: { lat: 38.881, lng: -92.343 },
+  river: { lat: 38.814, lng: -92.397 },
+};
+
 function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
   const googleWindow = window as GoogleWindow;
   if (googleWindow.google?.maps) return Promise.resolve(googleWindow.google.maps);
@@ -118,13 +129,27 @@ function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
   return mapsPromise;
 }
 
-function previewMapUrl(destination: string): string {
+function previewMapUrl(destination: string, item?: GuideRecommendation): string {
   const isColumbia = /\bcolumbia\b/i.test(destination) && /\b(missouri|mo)\b/i.test(destination);
-  const center = isColumbia ? '38.9517%2C-92.3341' : '39.8283%2C-98.5795';
-  const bounds = isColumbia
-    ? '-92.4300%2C38.8900%2C-92.2400%2C39.0200'
-    : '-125.0000%2C24.0000%2C-66.0000%2C50.0000';
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bounds}&layer=mapnik&marker=${center}`;
+  const center = item?.mapArea
+    ? mapAreaCenters[item.mapArea]
+    : isColumbia
+      ? { lat: 38.9517, lng: -92.3341 }
+      : { lat: 39.8283, lng: -98.5795 };
+  const longitudeRadius = item?.mapArea ? (item.mapArea === 'nature' || item.mapArea === 'river' ? 0.045 : 0.018) : isColumbia ? 0.095 : 29.5;
+  const latitudeRadius = item?.mapArea ? (item.mapArea === 'nature' || item.mapArea === 'river' ? 0.032 : 0.014) : isColumbia ? 0.065 : 13;
+  const bounds = [
+    center.lng - longitudeRadius,
+    center.lat - latitudeRadius,
+    center.lng + longitudeRadius,
+    center.lat + latitudeRadius,
+  ].join(',');
+  const params = new URLSearchParams({
+    bbox: bounds,
+    layer: 'mapnik',
+    marker: `${center.lat},${center.lng}`,
+  });
+  return `https://www.openstreetmap.org/export/embed.html?${params.toString()}`;
 }
 
 function liveMapUrl(query: string): string {
@@ -142,7 +167,10 @@ export function DestinationMap({
   onSelect: (id: string) => void;
   selectedId: string | null;
 }) {
-  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
+  const configuredApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
+  const apiKey = googleMapsApiEnabled(process.env.EXPO_PUBLIC_MAP_PROVIDER, configuredApiKey)
+    ? configuredApiKey
+    : undefined;
   const mapId = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID?.trim() || 'DEMO_MAP_ID';
   const mapElement = useRef<HTMLDivElement | null>(null);
   const map = useRef<MapInstance | null>(null);
@@ -281,26 +309,48 @@ export function DestinationMap({
     const query = `${selectedItem?.name ?? destination}, ${destination}`;
     return (
       <View style={styles.shell}>
+        <ScrollView
+          accessibilityLabel="Choose a map place"
+          contentContainerStyle={styles.pinRail}
+          horizontal
+          showsHorizontalScrollIndicator={false}>
+          {items.map((item) => {
+            const isSelected = item.id === selectedItem?.id;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                key={item.id}
+                onPress={() => onSelect(item.id)}
+                style={[styles.pin, isSelected && styles.pinSelected]}>
+                <Text style={[styles.pinText, isSelected && styles.pinTextSelected]}>{item.name}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
         <iframe
           allowFullScreen
           aria-label={`Map of ${query}`}
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
-          src={previewMapUrl(destination)}
+          src={previewMapUrl(destination, selectedItem)}
           style={{ border: 0, height: 344, width: '100%' }}
           title={`Map of ${query}`}
         />
         <View style={styles.previewBanner}>
           <View style={styles.flex}>
-            <Text style={styles.bannerTitle}>{status === 'error' ? 'Google connection needs attention' : 'Map preview'}</Text>
+            <Text style={styles.bannerTitle}>{selectedItem?.name ?? destination}</Text>
             <Text style={styles.bannerCopy}>
-              {message ?? 'Add the restricted Maps + Places browser key to unlock every category pin, live ratings, and review counts.'}
+              {message
+                ? `Open map is active. ${message}`
+                : 'OpenStreetMap neighborhood view · no account, API key, or billing required. Live reviews stay one tap away.'}
             </Text>
           </View>
           <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(liveMapUrl(query))} style={styles.openButton}>
-            <Text style={styles.openButtonText}>Open live</Text>
+            <Text style={styles.openButtonText}>Reviews & directions</Text>
           </Pressable>
         </View>
+        <Text style={styles.attribution}>Map data © OpenStreetMap contributors</Text>
       </View>
     );
   }
@@ -341,6 +391,11 @@ const styles = StyleSheet.create({
   shell: { backgroundColor: theme.colors.surface, borderColor: theme.colors.line, borderRadius: theme.radius.lg, borderWidth: 1, overflow: 'hidden' },
   previewBanner: { alignItems: 'center', backgroundColor: theme.colors.sand, flexDirection: 'row', gap: theme.spacing.md, padding: theme.spacing.md },
   liveBanner: { alignItems: 'center', backgroundColor: theme.colors.surface, borderTopColor: theme.colors.line, borderTopWidth: 1, flexDirection: 'row', gap: theme.spacing.md, padding: theme.spacing.md },
+  pinRail: { backgroundColor: theme.colors.surface, gap: 7, paddingHorizontal: theme.spacing.md, paddingVertical: 11 },
+  pin: { backgroundColor: theme.colors.sand, borderRadius: theme.radius.pill, paddingHorizontal: 11, paddingVertical: 8 },
+  pinSelected: { backgroundColor: theme.colors.coral },
+  pinText: { color: theme.colors.forest, fontSize: 10, fontWeight: '800' },
+  pinTextSelected: { color: theme.colors.white },
   flex: { flex: 1 },
   bannerTitle: { color: theme.colors.ink, fontSize: 13, fontWeight: '900' },
   bannerCopy: { color: theme.colors.muted, fontSize: 10, lineHeight: 15, marginTop: 2 },
@@ -348,4 +403,5 @@ const styles = StyleSheet.create({
   address: { color: theme.colors.muted, fontSize: 9, lineHeight: 13, marginTop: 3 },
   openButton: { backgroundColor: theme.colors.forest, borderRadius: theme.radius.pill, paddingHorizontal: 13, paddingVertical: 10 },
   openButtonText: { color: theme.colors.white, fontSize: 10, fontWeight: '900' },
+  attribution: { backgroundColor: theme.colors.surface, color: theme.colors.muted, fontSize: 8, paddingBottom: 8, paddingHorizontal: theme.spacing.md },
 });

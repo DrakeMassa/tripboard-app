@@ -155,7 +155,7 @@ export function DestinationGuide({ location }: { location: string | null | undef
           <View style={styles.mapHeader}>
             <View style={styles.flex}>
               <Text style={styles.activeLabel}>{activeLabel?.toUpperCase()} MAP</Text>
-              <Text style={styles.mapHelper}>Tap a category pin, then open Google Maps for live rating, reviews, hours, and directions.</Text>
+              <Text style={styles.mapHelper}>Choose a local pick to move the free area map. Reviews, current hours, and turn-by-turn directions open only when requested.</Text>
             </View>
             <Pill tone="sand">AREA VIEW</Pill>
           </View>
@@ -196,7 +196,7 @@ export function DestinationGuide({ location }: { location: string | null | undef
         </View>
         <EmbeddedVideoFeed videos={guide.videos} />
       </View>
-      <Text style={styles.footerNote}>Official pages ground the edit. The connected Google map supplies current ratings, review counts, photos, hours, and directions instead of freezing stale place data.</Text>
+      <Text style={styles.footerNote}>Official local sources ground the edit. Wanderly keeps the map free and opens live reviews, photos, hours, and directions only when you ask for them.</Text>
     </View>
   );
 }

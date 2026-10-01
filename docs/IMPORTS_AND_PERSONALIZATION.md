@@ -4,7 +4,16 @@ Wanderly should reduce trip administration rather than create another place to r
 
 ## Recommended integration order
 
-The selected pilot stack is **Resend inbound email → Supabase Edge Function → review queue**, **Google/Microsoft calendar OAuth**, and **FlightAware AeroAPI behind a server-only Edge Function**. Google Maps uses a separately restricted browser key. Airline and hotel passwords are never collected.
+The zero-billing pilot stack is **manual entry + provider links + `.ics` calendar export**, backed by the existing Supabase Free project and Vercel Hobby deployment. The map defaults to an OpenStreetMap area view and needs no API key. Forwarded-email import, calendar OAuth, live-flight enrichment, and paid Google Maps remain separately approved later phases. Airline and hotel passwords are never collected.
+
+## Zero-billing guardrail
+
+- Do not enable Google Cloud billing for the Columbia pilot.
+- Leave `EXPO_PUBLIC_MAP_PROVIDER` unset or set it to `openstreetmap`.
+- Leave both Google Maps environment variables unset.
+- A stored Google key is ignored unless `EXPO_PUBLIC_MAP_PROVIDER=google` is also set.
+- Opening the public Google Maps website for reviews or directions is a user-initiated link, not a billable Maps API request from Wanderly.
+- Supabase Free and Vercel Hobby still have plan limits; check their dashboards before intentionally increasing traffic or storage.
 
 ### 1. Forwarded confirmation email
 
@@ -20,7 +29,7 @@ This is the broadest first integration because airlines, hotels, rental cars, re
 
 The address must not act as a secret by itself. Rate limiting, sender verification, malware scanning, attachment limits, and idempotency are required before enabling it outside the pilot.
 
-For the pilot, use Resend inbound webhooks because the received message arrives as structured data and attachments can be fetched separately. The webhook must verify its signature before passing the payload to a Supabase Edge Function. Create a per-account alias such as `drake+<revocable-token>@trips.wanderly.app`; do not expose a service-role key to the Expo client.
+After the manual Columbia pilot is stable, evaluate an inbound-email provider because confirmations arrive as structured data and attachments can be fetched separately. The webhook must verify its signature before passing the payload to a Supabase Edge Function. Create a per-account alias such as `drake+<revocable-token>@trips.wanderly.app`; do not expose a service-role key to the Expo client. Do not activate a paid provider until pricing and caps are explicitly approved.
 
 ### 2. Calendar connection
 
@@ -53,14 +62,15 @@ There is no single reliable consumer API across airlines and hotels. Wanderly sh
 
 ### 5. Live flight and gate enrichment
 
-After an itinerary is approved, resolve the carrier, flight number, and departure date through FlightAware AeroAPI from a server-side Edge Function. Store the provider flight ID and last refresh time, then update scheduled/estimated/actual times, cancellation state, terminal, gate, baggage claim, route, and track only when the provider returns them. Gate assignments are often not published until close to departure, so the UI must show `Live gate pending` rather than inventing a gate.
+If a paid live-flight provider is approved later, resolve the carrier, flight number, and departure date from a server-side Edge Function. Store the provider flight ID and last refresh time, then update scheduled/estimated/actual times, cancellation state, terminal, gate, baggage claim, route, and track only when the provider returns them. Gate assignments are often not published until close to departure, so the UI must show `Live gate pending` rather than inventing a gate. Until then, preserve the airline confirmation link as the live source of truth.
 
 Use push alerts close to the trip and conservative polling outside the travel window. The AeroAPI key is a secret and must never use an `EXPO_PUBLIC_` name.
 
 ### 6. Maps, indoor airports, and videos
 
-- The web pilot uses Maps JavaScript API with Places API (New) for category pins, live ratings, review counts, addresses, and Google directions.
-- The browser key is intentionally visible but must be restricted by HTTPS referrer and API. Use separate keys for web, iOS, Android, and server workloads.
+- The web pilot uses an OpenStreetMap area embed, curated place selectors, and user-initiated links for current reviews and directions. It does not require a Maps API key or billing account.
+- MapLibre is the preferred later upgrade for richer first-party interaction. The rendering library is open source, but its tile source still needs a documented usage policy and capacity plan.
+- Paid Google Maps remains an optional provider. If approved later, its browser key must be restricted by HTTPS referrer and API, and web, iOS, Android, and server workloads must use separate keys.
 - Airport interiors use the airport's licensed map when available. CLT's official map supports multi-level routing, walk-time estimates, gates, food, shops, and lounges; Wanderly overlays the saved flights and live gates when published.
 - A universal rotatable 360-degree terminal model is not available through one public API. Add it airport-by-airport only where a venue provides licensed indoor geometry or panoramas.
 - Play permitted YouTube embeds and first-party video directly in Wanderly. Do not download, re-host, or scrape Instagram/TikTok video; use an official embed where supported and a source link otherwise.
