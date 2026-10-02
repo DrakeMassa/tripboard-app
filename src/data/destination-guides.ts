@@ -18,6 +18,13 @@ export type GuideRecommendation = {
   localTake: string;
   practicalNote?: string;
   sourceUrl: string;
+  rating?: {
+    score: number;
+    countLabel?: string;
+    source: 'Google' | 'Tripadvisor' | 'Public reviews';
+    checkedAt: string;
+    sourceUrl: string;
+  };
   mapArea?: 'campus' | 'downtown' | 'arcade' | 'south' | 'west' | 'nature' | 'river';
 };
 
@@ -56,7 +63,7 @@ export const guideSections: { id: GuideSectionId; label: string }[] = [
 const columbiaGuide: DestinationGuide = {
   id: 'columbia-missouri',
   destination: 'Columbia, Missouri',
-  updatedAt: 'September 27, 2026',
+  updatedAt: 'October 2, 2026',
   intro:
     'A game-weekend shortlist that mixes Mizzou energy with the places locals actually return to. Start with the essentials, then leave room for one unplanned stop.',
   recommendations: [
@@ -89,6 +96,12 @@ const columbiaGuide: DestinationGuide = {
       localTake:
         'The pick when the coffee matters more than a giant breakfast menu: seasonal beans, careful roasting, and a distinctly Columbia feel.',
       sourceUrl: 'https://www.visitcolumbiamo.com/directory/shortwave-coffee/',
+      rating: {
+        score: 4.8,
+        source: 'Google',
+        checkedAt: 'September 29, 2026',
+        sourceUrl: 'https://mycoffeeexplorer.com/guides/columbia-mo',
+      },
       mapArea: 'downtown',
     },
     {
@@ -99,6 +112,12 @@ const columbiaGuide: DestinationGuide = {
       localTake:
         'A long-running Ninth Street stop that fits naturally before a campus walk through the Columns and Francis Quadrangle.',
       sourceUrl: 'https://www.visitcolumbiamo.com/directory/lakota-coffee/',
+      rating: {
+        score: 4.7,
+        source: 'Google',
+        checkedAt: 'September 29, 2026',
+        sourceUrl: 'https://mycoffeeexplorer.com/guides/columbia-mo',
+      },
       mapArea: 'downtown',
     },
     {
@@ -109,6 +128,12 @@ const columbiaGuide: DestinationGuide = {
       localTake:
         'A smaller-batch alternative to the better-known downtown stops, with fair-trade beans and an Artist Alley setting that rewards a slower morning.',
       sourceUrl: 'https://www.visitcolumbiamo.com/directory/fretboard-coffee/',
+      rating: {
+        score: 4.7,
+        source: 'Google',
+        checkedAt: 'September 29, 2026',
+        sourceUrl: 'https://mycoffeeexplorer.com/guides/columbia-mo',
+      },
       mapArea: 'arcade',
     },
     {
@@ -120,6 +145,13 @@ const columbiaGuide: DestinationGuide = {
         'The creative breakfast choice: handmade plates and ingredients sourced from nearby farms rather than a generic game-weekend brunch.',
       practicalNote: 'Popular weekends can be busy; go early.',
       sourceUrl: 'https://www.visitcolumbiamo.com/directory/cafe-berlin/',
+      rating: {
+        score: 4.0,
+        countLabel: '146 reviews',
+        source: 'Tripadvisor',
+        checkedAt: 'October 2, 2026',
+        sourceUrl: 'https://www.tripadvisor.com/Restaurant_Review-g44257-d3193661-Reviews-Cafe_Berlin-Columbia_Missouri.html',
+      },
       mapArea: 'downtown',
     },
     {
@@ -182,6 +214,13 @@ const columbiaGuide: DestinationGuide = {
         'The polished dinner pick without feeling corporate: whole-animal butchery, local sourcing, thoughtful cocktails, and enough energy for a celebratory night.',
       practicalNote: 'Dinner is listed Tuesday–Saturday; reserve ahead for a football weekend.',
       sourceUrl: 'https://www.visitcolumbiamo.com/directory/barred-owl-butcher-table/',
+      rating: {
+        score: 4.5,
+        countLabel: '410 reviews',
+        source: 'Public reviews',
+        checkedAt: 'October 2, 2026',
+        sourceUrl: 'https://overlookmaps.com/places/barred-owl-butcher-and-table-columbia-4845823569030159',
+      },
       mapArea: 'downtown',
     },
     {

@@ -51,6 +51,66 @@ export function localDateTimeToIso(value: string, label: string): string {
   return parsed.toISOString();
 }
 
+function readLocalDateTime(value: string, label: string): {
+  date: string;
+  time: string;
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const candidate = value.trim();
+  if (!LOCAL_DATE_TIME_PATTERN.test(candidate)) {
+    throw new Error(`Enter ${label} as YYYY-MM-DD HH:MM.`);
+  }
+  const [date, time] = candidate.replace(' ', 'T').split('T');
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  const validation = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  if (
+    validation.getUTCFullYear() !== year ||
+    validation.getUTCMonth() + 1 !== month ||
+    validation.getUTCDate() !== day ||
+    validation.getUTCHours() !== hour ||
+    validation.getUTCMinutes() !== minute
+  ) {
+    throw new Error(`Enter a valid ${label}.`);
+  }
+  return { date, time, year, month, day, hour, minute };
+}
+
+export function zonedLocalDateTimeToIso(value: string, label: string, timeZone: string): string {
+  const parts = readLocalDateTime(value, label);
+  const utcGuess = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    timeZone,
+    year: 'numeric',
+  }).formatToParts(new Date(utcGuess));
+  const values = Object.fromEntries(formatted.map((part) => [part.type, part.value]));
+  const representedAsUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+  );
+  return new Date(utcGuess - (representedAsUtc - utcGuess)).toISOString();
+}
+
+export function optionalZonedLocalDateTimeToIso(
+  value: string | null | undefined,
+  label: string,
+  timeZone: string,
+): string | null {
+  return value?.trim() ? zonedLocalDateTimeToIso(value, label, timeZone) : null;
+}
+
 export function optionalLocalDateTimeToIso(
   value: string | null | undefined,
   label: string,
@@ -69,6 +129,26 @@ export function isoToLocalDateTimeInput(value: string | null | undefined): strin
   )}:${pad(date.getMinutes())}`;
 }
 
+export function isoToZonedDateTimeInput(
+  value: string | null | undefined,
+  timeZone: string,
+): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    timeZone,
+    year: 'numeric',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}`;
+}
+
 export function getDeviceTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -76,4 +156,3 @@ export function getDeviceTimeZone(): string {
     return 'UTC';
   }
 }
-

@@ -332,7 +332,7 @@ export function DestinationMap({
           allowFullScreen
           aria-label={`Map of ${query}`}
           loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
+          referrerPolicy="no-referrer"
           src={previewMapUrl(destination, selectedItem)}
           style={{ border: 0, height: 344, width: '100%' }}
           title={`Map of ${query}`}

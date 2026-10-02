@@ -6,7 +6,8 @@ export type ImportedTravelLeg = {
   arrivalPlace: string;
   departsAt: string;
   arrivesAt: string;
-  timeZone: string;
+  departureTimeZone: string;
+  arrivalTimeZone: string;
   notes: string;
 };
 
@@ -47,7 +48,8 @@ export const columbiaOutboundTemplate: ImportedTravelLeg[] = [
     arrivalPlace: 'CLT',
     departsAt: '2026-10-07T18:40:00.000Z',
     arrivesAt: '2026-10-07T19:53:00.000Z',
-    timeZone: 'America/New_York',
+    departureTimeZone: 'America/New_York',
+    arrivalTimeZone: 'America/New_York',
     notes: 'Columbia outbound · Economy · first leg',
   },
   {
@@ -58,7 +60,8 @@ export const columbiaOutboundTemplate: ImportedTravelLeg[] = [
     arrivalPlace: 'STL',
     departsAt: '2026-10-07T22:17:00.000Z',
     arrivesAt: '2026-10-08T00:18:00.000Z',
-    timeZone: 'America/New_York',
+    departureTimeZone: 'America/New_York',
+    arrivalTimeZone: 'America/Chicago',
     notes: 'Columbia outbound · Economy · connection in Charlotte',
   },
 ];
@@ -67,13 +70,24 @@ export function airportTimeZone(airportCode: string): string {
   return airportTimeZones[airportCode.trim().toUpperCase()] ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+export function destinationTimeZone(location: string | null | undefined): string {
+  const normalized = location?.trim().toLowerCase() ?? '';
+  if (/\b(columbia|st\.? louis)\b/.test(normalized) && /\b(missouri|mo)\b/.test(normalized)) {
+    return 'America/Chicago';
+  }
+  if (/\b(wilmington|charlotte)\b/.test(normalized) && /\b(north carolina|nc)\b/.test(normalized)) {
+    return 'America/New_York';
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
 function addDays(date: string, days: number): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
 }
 
-function zonedLocalToIso(date: string, time: string, timeZone: string): string {
+export function zonedLocalToIso(date: string, time: string, timeZone: string): string {
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute] = time.split(':').map(Number);
   const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
@@ -139,7 +153,8 @@ export function parsePastedFlights(value: string): ImportedTravelLeg[] {
       arrivalPlace,
       departsAt,
       arrivesAt,
-      timeZone: departureTimeZone,
+      departureTimeZone,
+      arrivalTimeZone,
       notes: 'Imported from pasted itinerary',
     };
   });
@@ -148,12 +163,19 @@ export function parsePastedFlights(value: string): ImportedTravelLeg[] {
   return legs;
 }
 
-export function formatAirportMoment(value: string | null, airportCode: string): string {
+export function formatAirportMoment(
+  value: string | null,
+  airportCode: string,
+  explicitTimeZone?: string | null,
+): string {
   if (!value) return 'Time to be added';
   return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: airportTimeZone(airportCode),
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    timeZone: explicitTimeZone || airportTimeZone(airportCode),
+    timeZoneName: 'short',
   }).format(new Date(value));
 }
 

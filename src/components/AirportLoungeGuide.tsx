@@ -15,11 +15,10 @@ export function AirportLoungeGuide({ travel }: { travel: LiveTravelSegment[] }) 
   const arrivingIndex = sorted.findIndex(
     (item, index) => item.arrivalPlace.trim().toUpperCase() === 'CLT' && sorted[index + 1]?.departurePlace.trim().toUpperCase() === 'CLT',
   );
-  if (arrivingIndex < 0) return null;
+  if (!sorted.some((item) => item.kind === 'flight')) return null;
 
-  const layover = getLayoverMinutes(sorted[arrivingIndex], sorted[arrivingIndex + 1]);
-  const arrivingFlight = [sorted[arrivingIndex].provider, sorted[arrivingIndex].serviceNumber].filter(Boolean).join(' · ');
-  const departingFlight = [sorted[arrivingIndex + 1].provider, sorted[arrivingIndex + 1].serviceNumber].filter(Boolean).join(' · ');
+  const hasCltConnection = arrivingIndex >= 0;
+  const layover = hasCltConnection ? getLayoverMinutes(sorted[arrivingIndex], sorted[arrivingIndex + 1]) : null;
 
   return (
     <Card style={styles.card}>
@@ -28,30 +27,34 @@ export function AirportLoungeGuide({ travel }: { travel: LiveTravelSegment[] }) 
           <MaterialCommunityIcons color={theme.colors.forest} name="sofa-single-outline" size={22} />
         </View>
         <View style={styles.flex}>
-          <Text style={styles.eyebrow}>YOUR CLT CONNECTION</Text>
-          <Text style={styles.title}>A lounge may fit this layover</Text>
+          <Text style={styles.eyebrow}>AIRPORT GUIDE</Text>
+          <Text style={styles.title}>Maps for every airport in this trip</Text>
         </View>
         {layover !== null ? <Pill tone="coral">{formatDuration(layover)}</Pill> : null}
       </View>
-      <AirportMap arrivingFlight={arrivingFlight} departingFlight={departingFlight} />
-      <Text style={styles.copy}>
-        The Club CLT is in Concourse A near gates A21–A22. Your Capital One Venture X can provide Priority Pass access after enrollment; Chase Sapphire Preferred does not add airport-lounge access.
-      </Text>
-      <View style={styles.statusRow}>
-        <MaterialCommunityIcons color={theme.colors.forestSoft} name="credit-card-check-outline" size={18} />
-        <Text style={styles.statusText}>Likely match · verify your activated membership, guest rules, hours, and capacity before walking over.</Text>
-      </View>
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(priorityPassUrl)} style={styles.linkButton}>
-          <Text style={styles.linkText}>Check live access</Text>
-          <MaterialCommunityIcons color={theme.colors.forest} name="open-in-new" size={15} />
-        </Pressable>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(cltMapUrl)} style={styles.linkButton}>
-          <Text style={styles.linkText}>CLT airport map</Text>
-          <MaterialCommunityIcons color={theme.colors.forest} name="map-outline" size={15} />
-        </Pressable>
-      </View>
-      <Text style={styles.disclaimer}>Access is never guaranteed; the lounge can restrict entry when busy. Card benefits can change.</Text>
+      <AirportMap travel={sorted} />
+      {hasCltConnection ? (
+        <>
+          <Text style={styles.copy}>
+            CLT lounge note: The Club CLT is in Concourse A near gates A21–A22. Venture X cardholders should check that Priority Pass enrollment is active; access, guests, hours, and capacity can change.
+          </Text>
+          <View style={styles.statusRow}>
+            <MaterialCommunityIcons color={theme.colors.forestSoft} name="credit-card-check-outline" size={18} />
+            <Text style={styles.statusText}>Card-aware guidance is a reminder, not an access guarantee. Verify the live membership screen before walking over.</Text>
+          </View>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(priorityPassUrl)} style={styles.linkButton}>
+              <Text style={styles.linkText}>Check live lounge access</Text>
+              <MaterialCommunityIcons color={theme.colors.forest} name="open-in-new" size={15} />
+            </Pressable>
+            <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(cltMapUrl)} style={styles.linkButton}>
+              <Text style={styles.linkText}>CLT wayfinding</Text>
+              <MaterialCommunityIcons color={theme.colors.forest} name="map-outline" size={15} />
+            </Pressable>
+          </View>
+          <Text style={styles.disclaimer}>Benefits and lounge admission can change. Wanderly never treats a card on file as proof of entry.</Text>
+        </>
+      ) : null}
     </Card>
   );
 }

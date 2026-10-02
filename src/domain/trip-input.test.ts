@@ -5,7 +5,9 @@ import {
   localDateTimeToIso,
   normalizeDateOnly,
   optionalLocalDateTimeToIso,
+  isoToZonedDateTimeInput,
   validateDateRange,
+  zonedLocalDateTimeToIso,
 } from '@/domain/trip-input';
 
 describe('trip input validation', () => {
@@ -31,6 +33,15 @@ describe('trip input validation', () => {
 
   it('allows an optional arrival or checkout time', () => {
     expect(optionalLocalDateTimeToIso('', 'arrival')).toBeNull();
+  });
+
+  it('keeps airport-local wall times stable across time zones', () => {
+    const eastern = zonedLocalDateTimeToIso('2026-10-07 18:17', 'departure', 'America/New_York');
+    const central = zonedLocalDateTimeToIso('2026-10-07 19:18', 'arrival', 'America/Chicago');
+
+    expect(eastern).toBe('2026-10-07T22:17:00.000Z');
+    expect(central).toBe('2026-10-08T00:18:00.000Z');
+    expect(isoToZonedDateTimeInput(central, 'America/Chicago')).toBe('2026-10-07 19:18');
   });
 
   it.each(['2026-10-07', '2026-10-07 25:00', 'tomorrow at two'])(

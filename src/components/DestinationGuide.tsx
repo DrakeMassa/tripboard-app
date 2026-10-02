@@ -43,9 +43,28 @@ function RecommendationActions({ item, openUrl }: { item: GuideRecommendation; o
       {item.mapArea ? (
         <Pressable accessibilityRole="link" onPress={() => void openUrl(googleMapsUrl(item))} style={styles.smallAction}>
           <MaterialCommunityIcons color={theme.colors.forest} name="google-maps" size={15} />
-          <Text style={styles.smallActionText}>Live Google reviews</Text>
+          <Text style={styles.smallActionText}>Current reviews & hours</Text>
         </Pressable>
       ) : null}
+    </View>
+  );
+}
+
+function RecommendationRating({ item, openUrl }: { item: GuideRecommendation; openUrl: (url: string) => Promise<void> }) {
+  if (!item.rating) return null;
+  return (
+    <View style={styles.ratingRow}>
+      <Pressable
+        accessibilityLabel={`${item.name} rating ${item.rating.score.toFixed(1)} out of 5`}
+        accessibilityRole="link"
+        onPress={() => void openUrl(item.rating?.sourceUrl ?? '')}
+        style={({ pressed }) => [styles.ratingBadge, pressed && styles.pressed]}>
+        <MaterialCommunityIcons color={theme.colors.coral} name="star" size={15} />
+        <Text style={styles.ratingScore}>{item.rating.score.toFixed(1)} / 5</Text>
+      </Pressable>
+      <Text style={styles.ratingMeta}>
+        {item.rating.source} snapshot{item.rating.countLabel ? ` · ${item.rating.countLabel}` : ''} · checked {item.rating.checkedAt}
+      </Text>
     </View>
   );
 }
@@ -134,7 +153,10 @@ export function DestinationGuide({ location }: { location: string | null | undef
                 <MaterialCommunityIcons color={theme.colors.forest} name={sectionIcons[item.section]} size={21} />
               </View>
               <View style={styles.flex}>
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <RecommendationRating item={item} openUrl={openUrl} />
+                </View>
                 <View style={styles.tagRow}>
                   {item.tags.map((tag) => <Text key={tag} style={styles.tag}>{tag}</Text>)}
                 </View>
@@ -170,7 +192,10 @@ export function DestinationGuide({ location }: { location: string | null | undef
               {selectedMapItem ? (
                 <Card style={styles.mapSelection}>
                   <View style={styles.flex}>
-                    <Text style={styles.name}>{selectedMapItem.name}</Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.name}>{selectedMapItem.name}</Text>
+                      <RecommendationRating item={selectedMapItem} openUrl={openUrl} />
+                    </View>
                     <Text style={styles.localTake}>{selectedMapItem.localTake}</Text>
                     <RecommendationActions item={selectedMapItem} openUrl={openUrl} />
                   </View>
@@ -196,7 +221,7 @@ export function DestinationGuide({ location }: { location: string | null | undef
         </View>
         <EmbeddedVideoFeed videos={guide.videos} />
       </View>
-      <Text style={styles.footerNote}>Official local sources ground the edit. Wanderly keeps the map free and opens live reviews, photos, hours, and directions only when you ask for them.</Text>
+      <Text style={styles.footerNote}>Ratings shown in the cards are dated public snapshots, not invented live data. Wanderly keeps the map free and opens current reviews, photos, hours, and directions only when you ask for them.</Text>
     </View>
   );
 }
@@ -224,7 +249,12 @@ const styles = StyleSheet.create({
   activeLabel: { color: theme.colors.coral, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   recommendationCard: { alignItems: 'flex-start', flexDirection: 'row', gap: theme.spacing.md },
   iconBox: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
+  nameRow: { alignItems: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' },
   name: { color: theme.colors.ink, fontSize: 15, fontWeight: '800' },
+  ratingRow: { alignItems: 'flex-end', gap: 3 },
+  ratingBadge: { alignItems: 'center', backgroundColor: theme.colors.coralSoft, borderRadius: theme.radius.pill, flexDirection: 'row', gap: 4, minHeight: 28, paddingHorizontal: 9 },
+  ratingScore: { color: theme.colors.coral, fontSize: 11, fontWeight: '900' },
+  ratingMeta: { color: theme.colors.muted, fontSize: 8, lineHeight: 11, maxWidth: 210, textAlign: 'right' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 },
   tag: { backgroundColor: theme.colors.coralSoft, borderRadius: theme.radius.pill, color: theme.colors.coral, fontSize: 9, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, textTransform: 'uppercase' },
   localTake: { color: theme.colors.muted, fontSize: 12, lineHeight: 18, marginTop: 9 },

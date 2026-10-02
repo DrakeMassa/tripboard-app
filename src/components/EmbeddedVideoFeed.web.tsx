@@ -24,7 +24,7 @@ export function EmbeddedVideoFeed({ videos }: { videos: GuideVideo[] }) {
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             loading="lazy"
-            referrerPolicy="strict-origin-when-cross-origin"
+            referrerPolicy="no-referrer"
             src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.embedId as string)}?playsinline=1&rel=0`}
             style={{ border: 0, height: 356, width: '100%' }}
             title={video.title}

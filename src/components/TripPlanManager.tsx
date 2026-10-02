@@ -36,15 +36,17 @@ import { buildCalendarFile, calendarFileName, CalendarEvent } from '@/domain/cal
 import { normalizeExternalResourceUrl } from '@/domain/resources';
 import {
   flightTrackerUrl,
+  airportTimeZone,
+  destinationTimeZone,
   formatAirportMoment,
   formatDuration,
   getLayoverMinutes,
 } from '@/domain/travel-itinerary';
 import {
   getDeviceTimeZone,
-  isoToLocalDateTimeInput,
-  localDateTimeToIso,
-  optionalLocalDateTimeToIso,
+  isoToZonedDateTimeInput,
+  optionalZonedLocalDateTimeToIso,
+  zonedLocalDateTimeToIso,
 } from '@/domain/trip-input';
 import type { TravelKind } from '@/types/trip';
 
@@ -63,11 +65,15 @@ const travelIcons = Object.fromEntries(
   travelKinds.map(({ kind, icon }) => [kind, icon]),
 ) as Record<TravelKind, IconName>;
 
-function formatMoment(value: string | null): string {
+function formatMoment(value: string | null, timeZone?: string | null): string {
   if (!value) return 'Time to be added';
   return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    timeZone: timeZone || undefined,
+    timeZoneName: 'short',
   }).format(new Date(value));
 }
 
@@ -102,6 +108,19 @@ function IconAction({ label, name, onPress }: { label: string; name: IconName; o
       onPress={onPress}
       style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}>
       <MaterialCommunityIcons color={theme.colors.forest} name={name} size={19} />
+    </Pressable>
+  );
+}
+
+function TextAction({ label, name, onPress }: { label: string; name: IconName; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}>
+      <MaterialCommunityIcons color={theme.colors.forest} name={name} size={16} />
+      <Text style={styles.textActionLabel}>{label}</Text>
     </Pressable>
   );
 }
@@ -150,13 +169,19 @@ function TravelForm({
   onSaved: (item: LiveTravelSegment) => void;
   tripId: string;
 }) {
+  const initialDepartureTimeZone = item?.kind === 'flight'
+    ? airportTimeZone(item.departurePlace)
+    : item?.departureTimeZone ?? getDeviceTimeZone();
+  const initialArrivalTimeZone = item?.kind === 'flight'
+    ? airportTimeZone(item.arrivalPlace)
+    : item?.arrivalTimeZone ?? getDeviceTimeZone();
   const [kind, setKind] = useState<TravelKind>(item?.kind ?? 'flight');
   const [provider, setProvider] = useState(item?.provider ?? '');
   const [serviceNumber, setServiceNumber] = useState(item?.serviceNumber ?? '');
   const [departurePlace, setDeparturePlace] = useState(item?.departurePlace ?? '');
   const [arrivalPlace, setArrivalPlace] = useState(item?.arrivalPlace ?? '');
-  const [departsAt, setDepartsAt] = useState(isoToLocalDateTimeInput(item?.departsAt));
-  const [arrivesAt, setArrivesAt] = useState(isoToLocalDateTimeInput(item?.arrivesAt));
+  const [departsAt, setDepartsAt] = useState(isoToZonedDateTimeInput(item?.departsAt, initialDepartureTimeZone));
+  const [arrivesAt, setArrivesAt] = useState(isoToZonedDateTimeInput(item?.arrivesAt, initialArrivalTimeZone));
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,8 +195,14 @@ function TravelForm({
     setIsSaving(true);
     setError(null);
     try {
-      const departureIso = localDateTimeToIso(departsAt, 'departure time');
-      const arrivalIso = optionalLocalDateTimeToIso(arrivesAt, 'arrival time');
+      const departureTimeZone = kind === 'flight'
+        ? airportTimeZone(departurePlace)
+        : item?.departureTimeZone ?? getDeviceTimeZone();
+      const arrivalTimeZone = kind === 'flight'
+        ? airportTimeZone(arrivalPlace)
+        : item?.arrivalTimeZone ?? getDeviceTimeZone();
+      const departureIso = zonedLocalDateTimeToIso(departsAt, 'departure time', departureTimeZone);
+      const arrivalIso = optionalZonedLocalDateTimeToIso(arrivesAt, 'arrival time', arrivalTimeZone);
       if (arrivalIso && Date.parse(arrivalIso) < Date.parse(departureIso)) {
         throw new Error('Arrival cannot be before departure.');
       }
@@ -183,7 +214,8 @@ function TravelForm({
         arrivalPlace,
         departsAt: departureIso,
         arrivesAt: arrivalIso,
-        timeZone: getDeviceTimeZone(),
+        departureTimeZone,
+        arrivalTimeZone,
         notes,
       };
       const saved = item
@@ -285,7 +317,7 @@ function TravelForm({
           value={arrivesAt}
         />
       </View>
-      <Text style={styles.helper}>Times use your current device time zone. Format: YYYY-MM-DD HH:MM.</Text>
+      <Text style={styles.helper}>Flight times use each airport’s local time, including time-zone changes. Format: YYYY-MM-DD HH:MM.</Text>
       <TextInput
         accessibilityLabel="Travel notes"
         multiline
@@ -320,17 +352,20 @@ function StayForm({
   onDeleted,
   onSaved,
   tripId,
+  tripLocation,
 }: {
   item: LiveAccommodation | null;
   onCancel: () => void;
   onDeleted: (id: string) => void;
   onSaved: (item: LiveAccommodation) => void;
   tripId: string;
+  tripLocation?: string | null;
 }) {
+  const timeZone = item?.timeZone ?? destinationTimeZone(tripLocation);
   const [name, setName] = useState(item?.name ?? '');
   const [address, setAddress] = useState(item?.address ?? '');
-  const [checkInAt, setCheckInAt] = useState(isoToLocalDateTimeInput(item?.checkInAt));
-  const [checkOutAt, setCheckOutAt] = useState(isoToLocalDateTimeInput(item?.checkOutAt));
+  const [checkInAt, setCheckInAt] = useState(isoToZonedDateTimeInput(item?.checkInAt, timeZone));
+  const [checkOutAt, setCheckOutAt] = useState(isoToZonedDateTimeInput(item?.checkOutAt, timeZone));
   const [bookingUrl, setBookingUrl] = useState(item?.bookingUrl ?? '');
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [isSaving, setIsSaving] = useState(false);
@@ -345,8 +380,8 @@ function StayForm({
     setIsSaving(true);
     setError(null);
     try {
-      const checkInIso = optionalLocalDateTimeToIso(checkInAt, 'check-in time');
-      const checkOutIso = optionalLocalDateTimeToIso(checkOutAt, 'check-out time');
+      const checkInIso = optionalZonedLocalDateTimeToIso(checkInAt, 'check-in time', timeZone);
+      const checkOutIso = optionalZonedLocalDateTimeToIso(checkOutAt, 'check-out time', timeZone);
       if (checkInIso && checkOutIso && Date.parse(checkOutIso) < Date.parse(checkInIso)) {
         throw new Error('Checkout cannot be before check-in.');
       }
@@ -356,7 +391,7 @@ function StayForm({
         checkInAt: checkInIso,
         checkOutAt: checkOutIso,
         bookingUrl: normalizeExternalResourceUrl(bookingUrl),
-        timeZone: getDeviceTimeZone(),
+        timeZone,
         notes,
       };
       const saved = item
@@ -419,6 +454,7 @@ function StayForm({
           value={checkOutAt}
         />
       </View>
+      <Text style={styles.helper}>Times use the destination time zone ({timeZone}).</Text>
       <TextInput
         accessibilityLabel="Booking link"
         autoCapitalize="none"
@@ -464,16 +500,19 @@ function ItineraryForm({
   onDeleted,
   onSaved,
   tripId,
+  tripLocation,
 }: {
   item: LiveItineraryItem | null;
   onCancel: () => void;
   onDeleted: (id: string) => void;
   onSaved: (item: LiveItineraryItem) => void;
   tripId: string;
+  tripLocation?: string | null;
 }) {
+  const timeZone = item?.timeZone ?? destinationTimeZone(tripLocation);
   const [title, setTitle] = useState(item?.title ?? '');
-  const [startsAt, setStartsAt] = useState(isoToLocalDateTimeInput(item?.startsAt));
-  const [endsAt, setEndsAt] = useState(isoToLocalDateTimeInput(item?.endsAt));
+  const [startsAt, setStartsAt] = useState(isoToZonedDateTimeInput(item?.startsAt, timeZone));
+  const [endsAt, setEndsAt] = useState(isoToZonedDateTimeInput(item?.endsAt, timeZone));
   const [details, setDetails] = useState(item?.details ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -487,8 +526,8 @@ function ItineraryForm({
     setIsSaving(true);
     setError(null);
     try {
-      const startIso = localDateTimeToIso(startsAt, 'start time');
-      const endIso = optionalLocalDateTimeToIso(endsAt, 'end time');
+      const startIso = zonedLocalDateTimeToIso(startsAt, 'start time', timeZone);
+      const endIso = optionalZonedLocalDateTimeToIso(endsAt, 'end time', timeZone);
       if (endIso && Date.parse(endIso) < Date.parse(startIso)) {
         throw new Error('The end time cannot be before the start time.');
       }
@@ -497,7 +536,7 @@ function ItineraryForm({
         details,
         startsAt: startIso,
         endsAt: endIso,
-        timeZone: getDeviceTimeZone(),
+        timeZone,
       };
       const saved = item
         ? await updateItineraryItem({ id: item.id, ...shared })
@@ -551,6 +590,7 @@ function ItineraryForm({
           value={endsAt}
         />
       </View>
+      <Text style={styles.helper}>Times use the destination time zone ({timeZone}).</Text>
       <TextInput
         accessibilityLabel="Plan details"
         multiline
@@ -693,10 +733,16 @@ export function TripPlanManager({
                         {[item.provider, item.serviceNumber].filter(Boolean).join(' · ') || travelKinds.find((option) => option.kind === item.kind)?.label}
                       </Text>
                       <View style={styles.timeRow}>
-                        <Text style={styles.itemMeta}>{formatAirportMoment(item.departsAt, item.departurePlace)}</Text>
+                        <Text style={styles.itemMeta}>{formatAirportMoment(item.departsAt, item.departurePlace, item.departureTimeZone)}</Text>
                         <Text style={styles.timeArrow}>→</Text>
-                        <Text style={styles.itemMeta}>{formatAirportMoment(item.arrivesAt, item.arrivalPlace)}</Text>
+                        <Text style={styles.itemMeta}>{formatAirportMoment(item.arrivesAt, item.arrivalPlace, item.arrivalTimeZone)}</Text>
                       </View>
+                      {item.notes ? (
+                        <View style={styles.savedNoteRow}>
+                          <MaterialCommunityIcons color={theme.colors.forestSoft} name="note-text-outline" size={14} />
+                          <Text style={styles.savedNoteText}>{item.notes}</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <View style={styles.rowActions}>
                       {trackerUrl ? (
@@ -716,7 +762,7 @@ export function TripPlanManager({
                           })
                         }
                       />
-                      <IconAction
+                      <TextAction
                         label="Edit travel"
                         name="pencil-outline"
                         onPress={() => {
@@ -827,7 +873,7 @@ export function TripPlanManager({
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.itemTitle}>{item.title}</Text>
-                  <Text style={styles.itemMeta}>{formatMoment(item.startsAt)}</Text>
+                  <Text style={styles.itemMeta}>{formatMoment(item.startsAt, item.timeZone)}</Text>
                   {item.details ? <Text style={styles.itemMeta}>{item.details}</Text> : null}
                 </View>
                 <View style={styles.rowActions}>
@@ -889,6 +935,7 @@ export function TripPlanManager({
               setShowItineraryForm(false);
             }}
             tripId={tripId}
+            tripLocation={tripLocation}
           />
         )}
       </View>
@@ -905,7 +952,7 @@ export function TripPlanManager({
                 <View style={styles.flex}>
                   <Text style={styles.itemTitle}>{item.name}</Text>
                   <Text style={styles.itemMeta}>{item.address || 'Address to be added'}</Text>
-                  <Text style={styles.itemMeta}>{formatMoment(item.checkInAt)}</Text>
+                  <Text style={styles.itemMeta}>{formatMoment(item.checkInAt, item.timeZone)}</Text>
                 </View>
                 <View style={styles.rowActions}>
                   {item.bookingUrl ? (
@@ -975,6 +1022,7 @@ export function TripPlanManager({
               setShowStayForm(false);
             }}
             tripId={tripId}
+            tripLocation={tripLocation}
           />
         )}
       </View>
@@ -1016,6 +1064,10 @@ const styles = StyleSheet.create({
   layoverRow: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: theme.colors.coralSoft, borderRadius: theme.radius.pill, flexDirection: 'row', gap: 6, marginBottom: 10, marginLeft: 56, paddingHorizontal: 10, paddingVertical: 6 },
   layoverText: { color: theme.colors.coral, fontSize: 10, fontWeight: '900' },
   iconAction: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.pill, height: 36, justifyContent: 'center', width: 36 },
+  textAction: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.pill, flexDirection: 'row', gap: 4, minHeight: 36, paddingHorizontal: 10 },
+  textActionLabel: { color: theme.colors.forest, fontSize: 9, fontWeight: '900' },
+  savedNoteRow: { alignItems: 'flex-start', backgroundColor: theme.colors.sage, borderRadius: theme.radius.sm, flexDirection: 'row', gap: 6, marginTop: 7, padding: 8 },
+  savedNoteText: { color: theme.colors.forestSoft, flex: 1, fontSize: 9, lineHeight: 13 },
   emptyCard: { alignItems: 'center', backgroundColor: theme.colors.sand, flexDirection: 'row', gap: theme.spacing.md },
   formCard: { gap: theme.spacing.md },
   formTitle: { color: theme.colors.ink, fontFamily: 'serif', fontSize: 21, fontWeight: '800' },

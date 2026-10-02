@@ -25,6 +25,19 @@ describe('destination guides', () => {
     });
   });
 
+  it('shows only sourced ratings with a visible five-point scale', () => {
+    const guide = getDestinationGuide('Columbia, Missouri');
+    const rated = guide?.recommendations.filter((item) => item.rating) ?? [];
+
+    expect(rated.length).toBeGreaterThanOrEqual(5);
+    rated.forEach((item) => {
+      expect(item.rating?.score).toBeGreaterThan(0);
+      expect(item.rating?.score).toBeLessThanOrEqual(5);
+      expect(item.rating?.checkedAt).toBeTruthy();
+      expect(item.rating?.sourceUrl).toMatch(/^https:\/\//);
+    });
+  });
+
   it('does not invent a guide for an uncurated destination', () => {
     expect(getDestinationGuide('Somewhere new')).toBeNull();
   });

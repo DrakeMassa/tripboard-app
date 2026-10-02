@@ -49,7 +49,10 @@ export default function TripDetailScreen() {
   const travelOffset = useRef(0);
   const essentialsOffset = useRef(0);
 
-  const goHome = () => router.replace('/');
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
   const scrollTo = (offset: number) => {
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ animated: true, y: Math.max(0, offset - 12) }));
   };
@@ -92,8 +95,8 @@ export default function TripDetailScreen() {
     return (
       <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
-            <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
+          <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
           <View style={styles.backButton} />
@@ -110,8 +113,8 @@ export default function TripDetailScreen() {
     return (
       <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
-            <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
+          <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
           <View style={styles.backButton} />
@@ -144,8 +147,8 @@ export default function TripDetailScreen() {
   return (
     <Screen scrollRef={scrollRef}>
       <View style={styles.topBar}>
-        <Pressable accessibilityLabel="Go to Home" onPress={goHome} style={styles.backButton}>
-          <MaterialCommunityIcons color={theme.colors.forest} name="home-outline" size={22} />
+        <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
+          <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
         </Pressable>
         <PreviewNotice label="LIVE TRIP" />
         <Pressable
@@ -196,6 +199,26 @@ export default function TripDetailScreen() {
         />
       ) : null}
 
+      {liveTrip.description ? (
+        <Card style={styles.tripNoteCard}>
+          <View style={styles.tripNoteIcon}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="notebook-edit-outline" size={22} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.tripNoteLabel}>TRIP NOTE</Text>
+            <Text style={styles.tripNoteText}>{liveTrip.description}</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Edit trip note"
+            accessibilityRole="button"
+            onPress={() => setIsEditingTrip(true)}
+            style={styles.noteEditButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="pencil-outline" size={17} />
+            <Text style={styles.noteEditText}>Edit</Text>
+          </Pressable>
+        </Card>
+      ) : null}
+
       <View style={styles.summaryGrid}>
         <Pressable
           accessibilityHint="Opens the itinerary importer"
@@ -204,8 +227,8 @@ export default function TripDetailScreen() {
           style={({ pressed }) => [styles.summaryPressable, pressed && styles.pressed]}>
           <Card style={styles.summaryCard}>
             <RoundIcon name="airplane-landing" />
-            <Text style={styles.summaryValue}>Travel to add</Text>
-            <Text style={styles.summaryLabel}>Tap to add arrival, connections, and return</Text>
+            <Text style={styles.summaryValue}>Travel details</Text>
+            <Text style={styles.summaryLabel}>Tap to import, add, or edit flights and connections</Text>
             <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={20} style={styles.summaryChevron} />
           </Card>
         </Pressable>
@@ -264,6 +287,12 @@ const styles = StyleSheet.create({
   summaryValue: { color: theme.colors.ink, fontSize: 15, fontWeight: '800', marginTop: 3 },
   summaryLabel: { color: theme.colors.muted, fontSize: 11, lineHeight: 16 },
   pressed: { opacity: 0.72 },
+  tripNoteCard: { alignItems: 'flex-start', backgroundColor: theme.colors.sage, flexDirection: 'row', gap: theme.spacing.md },
+  tripNoteIcon: { alignItems: 'center', backgroundColor: theme.colors.white, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
+  tripNoteLabel: { color: theme.colors.coral, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  tripNoteText: { color: theme.colors.ink, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  noteEditButton: { alignItems: 'center', borderColor: theme.colors.line, borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 5, minHeight: 36, paddingHorizontal: 10 },
+  noteEditText: { color: theme.colors.forest, fontSize: 10, fontWeight: '900' },
   section: { gap: theme.spacing.md },
   flatCard: { paddingVertical: 4 },
   arrivalRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 14 },

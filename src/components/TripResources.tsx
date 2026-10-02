@@ -4,12 +4,17 @@ import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-nat
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, Card, SectionTitle } from '@/components/design';
+import { SelectedTripFile, TripFilePicker } from '@/components/TripFilePicker';
 import { theme } from '@/constants/theme';
 import {
+  createTripDocumentUrl,
   createTripResource,
+  deleteTripDocument,
   deleteTripResource,
   listTripResources,
   LiveTripResource,
+  MAX_TRIP_DOCUMENT_BYTES,
+  uploadTripDocument,
   updateTripResource,
 } from '@/data/live';
 import { inferResourceProvider, normalizeExternalResourceUrl } from '@/domain/resources';
@@ -46,6 +51,7 @@ type DisplayResource = {
   detail: string;
   details: string;
   externalUrl: string | null;
+  storagePath: string | null;
 };
 
 function toLiveDisplay(resource: LiveTripResource): DisplayResource {
@@ -57,6 +63,7 @@ function toLiveDisplay(resource: LiveTripResource): DisplayResource {
     detail: resource.details || resource.provider || 'Saved with this trip',
     details: resource.details ?? '',
     externalUrl: resource.externalUrl,
+    storagePath: resource.storagePath,
   };
 }
 
@@ -74,6 +81,7 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
   const [provider, setProvider] = useState('');
   const [details, setDetails] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<SelectedTripFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,6 +115,7 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
     setProvider('');
     setDetails('');
     setExternalUrl('');
+    setSelectedFile(null);
     setError(null);
     setEditingResource(null);
     setIsConfirmingDelete(false);
@@ -120,6 +129,7 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
     setProvider('');
     setDetails('');
     setExternalUrl('');
+    setSelectedFile(null);
     setError(null);
     setIsConfirmingDelete(false);
     setIsAdding(true);
@@ -132,6 +142,7 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
     setProvider(resource.provider);
     setDetails(resource.details);
     setExternalUrl(resource.externalUrl ?? '');
+    setSelectedFile(null);
     setError(null);
     setIsConfirmingDelete(false);
     setIsAdding(true);
@@ -143,17 +154,31 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
       setError('Give this item a short title, such as “Game tickets.”');
       return;
     }
+    if (selectedFile && selectedFile.size > MAX_TRIP_DOCUMENT_BYTES) {
+      setError('Choose a file smaller than 10 MB.');
+      return;
+    }
     if (isSaving) return;
 
     setIsSaving(true);
     setError(null);
+    let uploadedPath: string | null = null;
     try {
+      if (selectedFile) {
+        uploadedPath = await uploadTripDocument({
+          tripId,
+          file: selectedFile.blob,
+          fileName: selectedFile.name,
+          contentType: selectedFile.type,
+        });
+      }
       const shared = {
         kind,
         title: normalizedTitle,
         provider,
         details,
         externalUrl: normalizeExternalResourceUrl(externalUrl),
+        storagePath: uploadedPath ?? editingResource?.storagePath ?? null,
       };
       const resource = editingResource
         ? await updateTripResource({ id: editingResource.id, ...shared })
@@ -163,8 +188,22 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
         const exists = current.some((item) => item.id === display.id);
         return exists ? current.map((item) => (item.id === display.id ? display : item)) : [...current, display];
       });
+      if (uploadedPath && editingResource?.storagePath && editingResource.storagePath !== uploadedPath) {
+        try {
+          await deleteTripDocument(editingResource.storagePath);
+        } catch {
+          // The replacement is linked and private; a stale private object can be cleaned up later.
+        }
+      }
       resetForm();
     } catch (cause) {
+      if (uploadedPath) {
+        try {
+          await deleteTripDocument(uploadedPath);
+        } catch {
+          // Keep the original upload/save error visible.
+        }
+      }
       setError(cause instanceof Error ? cause.message : 'Could not save this trip item.');
     } finally {
       setIsSaving(false);
@@ -181,6 +220,13 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
     setError(null);
     try {
       await deleteTripResource(editingResource.id);
+      if (editingResource.storagePath) {
+        try {
+          await deleteTripDocument(editingResource.storagePath);
+        } catch {
+          // The record is gone; an inaccessible private orphan can be cleaned up later.
+        }
+      }
       setResources((current) => current.filter((item) => item.id !== editingResource.id));
       resetForm();
     } catch (cause) {
@@ -190,8 +236,11 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
     }
   };
 
-  const openResource = async (url: string) => {
+  const openResource = async (resource: DisplayResource) => {
     try {
+      const url = resource.storagePath
+        ? await createTripDocumentUrl(resource.storagePath)
+        : resource.externalUrl;
       const safeUrl = normalizeExternalResourceUrl(url);
       if (safeUrl) await Linking.openURL(safeUrl);
     } catch (cause) {
@@ -202,7 +251,7 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
   return (
     <View style={styles.section}>
       <SectionTitle action={resources.length ? `${resources.length} saved` : undefined}>
-        Tickets, files & links
+        Tickets, boarding passes & files
       </SectionTitle>
 
       {isLoading ? (
@@ -216,10 +265,10 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
           {resources.map((resource, index) => (
             <View key={resource.id} style={[styles.resourceRow, index > 0 && styles.divider]}>
               <Pressable
-                accessibilityHint={resource.externalUrl ? 'Opens the linked item' : undefined}
-                accessibilityRole={resource.externalUrl ? 'link' : undefined}
-                onPress={resource.externalUrl ? () => void openResource(resource.externalUrl as string) : undefined}
-                style={({ pressed }) => [styles.resourceMain, pressed && resource.externalUrl && styles.pressed]}>
+                accessibilityHint={resource.externalUrl || resource.storagePath ? 'Opens the saved item' : undefined}
+                accessibilityRole={resource.externalUrl || resource.storagePath ? 'link' : undefined}
+                onPress={resource.externalUrl || resource.storagePath ? () => void openResource(resource) : undefined}
+                style={({ pressed }) => [styles.resourceMain, pressed && (resource.externalUrl || resource.storagePath) && styles.pressed]}>
                 <View style={styles.resourceIcon}>
                   <MaterialCommunityIcons
                     color={theme.colors.forest}
@@ -233,12 +282,12 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
                 </View>
                 <View style={styles.resourceStatus}>
                   <Text
-                    style={resource.externalUrl ? styles.linkedText : styles.savedText}>
-                    {resource.externalUrl ? 'OPEN' : 'SAVED'}
+                    style={resource.externalUrl || resource.storagePath ? styles.linkedText : styles.savedText}>
+                    {resource.storagePath ? 'FILE' : resource.externalUrl ? 'OPEN' : 'SAVED'}
                   </Text>
                   <MaterialCommunityIcons
-                    color={resource.externalUrl ? theme.colors.forestSoft : theme.colors.muted}
-                    name={resource.externalUrl ? 'open-in-new' : 'check-circle-outline'}
+                    color={resource.externalUrl || resource.storagePath ? theme.colors.forestSoft : theme.colors.muted}
+                    name={resource.storagePath ? 'file-lock-outline' : resource.externalUrl ? 'open-in-new' : 'check-circle-outline'}
                     size={18}
                   />
                 </View>
@@ -261,14 +310,14 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
           <View style={styles.flex}>
             <Text style={styles.itemTitle}>Everything important, easy to find</Text>
             <Text style={styles.itemMeta}>
-              Save ticket and parking details, confirmations, documents, or a shared photo-album link.
+              Save boarding passes, ticket and parking details, confirmations, documents, or a shared photo-album link.
             </Text>
           </View>
         </Card>
       ) : null}
 
       {user && !isAdding ? (
-        <ActionButton icon="plus" label="Add ticket, file, or link" onPress={startAdding} />
+        <ActionButton icon="plus" label="Add boarding pass, ticket, or link" onPress={startAdding} />
       ) : null}
 
       {user && isAdding ? (
@@ -332,8 +381,34 @@ export function TripResources({ initialOpen = false, tripId }: { initialOpen?: b
             style={styles.input}
             value={externalUrl}
           />
+          <TripFilePicker
+            disabled={isSaving}
+            onSelected={(file) => {
+              setSelectedFile(file);
+              if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '));
+              if (kind === 'link' || kind === 'photo_album') setKind('document');
+              setError(null);
+            }}
+          />
+          {selectedFile ? (
+            <View style={styles.selectedFile}>
+              <MaterialCommunityIcons color={theme.colors.forest} name="file-check-outline" size={19} />
+              <View style={styles.flex}>
+                <Text numberOfLines={1} style={styles.selectedFileName}>{selectedFile.name}</Text>
+                <Text style={styles.selectedFileMeta}>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB · private trip file</Text>
+              </View>
+              <Pressable accessibilityLabel="Remove selected file" onPress={() => setSelectedFile(null)} style={styles.removeFileButton}>
+                <MaterialCommunityIcons color={theme.colors.forest} name="close" size={17} />
+              </Pressable>
+            </View>
+          ) : editingResource?.storagePath ? (
+            <View style={styles.selectedFile}>
+              <MaterialCommunityIcons color={theme.colors.forest} name="file-lock-outline" size={19} />
+              <Text style={styles.selectedFileName}>A private file is already attached. Choose another only to replace it.</Text>
+            </View>
+          ) : null}
           <Text style={styles.helperText}>
-            Paste the original provider link for a current mobile ticket or boarding pass. Shared Apple Photos and Google Photos links work too. Only secure HTTPS links are accepted.
+            Upload a PDF, image, or Apple Wallet pass (10 MB max), or paste the provider’s secure link. Use the live airline link for changing gate or barcode data; use a file as an offline backup. Shared Apple Photos and Google Photos links work too.
           </Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {editingResource ? (
@@ -394,6 +469,10 @@ const styles = StyleSheet.create({
   input: { backgroundColor: theme.colors.white, borderColor: theme.colors.line, borderRadius: theme.radius.md, borderWidth: 1, color: theme.colors.ink, fontSize: 15, minHeight: 50, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md },
   multilineInput: { minHeight: 96 },
   helperText: { color: theme.colors.muted, fontSize: 11, lineHeight: 16 },
+  selectedFile: { alignItems: 'center', backgroundColor: theme.colors.sage, borderRadius: theme.radius.md, flexDirection: 'row', gap: theme.spacing.sm, padding: theme.spacing.md },
+  selectedFileName: { color: theme.colors.ink, flexShrink: 1, fontSize: 11, fontWeight: '800' },
+  selectedFileMeta: { color: theme.colors.muted, fontSize: 9, marginTop: 2 },
+  removeFileButton: { alignItems: 'center', backgroundColor: theme.colors.white, borderRadius: theme.radius.pill, height: 30, justifyContent: 'center', width: 30 },
   errorText: { color: theme.colors.danger, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   deleteButton: { alignItems: 'center', alignSelf: 'flex-start', borderColor: theme.colors.danger, borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 6, minHeight: 40, paddingHorizontal: theme.spacing.md },
   deleteText: { color: theme.colors.danger, fontSize: 12, fontWeight: '800' },

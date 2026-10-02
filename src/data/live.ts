@@ -1,6 +1,9 @@
 import { requireSupabase } from '@/lib/supabase';
 import type { TravelKind, TripResourceKind } from '@/types/trip';
 
+export const TRIP_DOCUMENT_BUCKET = 'trip-documents';
+export const MAX_TRIP_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
 export type LiveTrip = {
   id: string;
   title: string;
@@ -23,6 +26,18 @@ export type LiveTripResource = {
   details: string | null;
 };
 
+export type LiveTripInvitation = {
+  id: string;
+  tripId: string;
+  invitedEmail: string | null;
+  expiresAt: string;
+  maxUses: number;
+  useCount: number;
+  revokedAt: string | null;
+  createdAt: string;
+  isActive: boolean;
+};
+
 export type LiveTravelSegment = {
   id: string;
   tripId: string;
@@ -34,6 +49,8 @@ export type LiveTravelSegment = {
   arrivalPlace: string;
   departsAt: string;
   arrivesAt: string | null;
+  departureTimeZone: string;
+  arrivalTimeZone: string;
   notes: string | null;
 };
 
@@ -44,6 +61,7 @@ export type LiveAccommodation = {
   address: string | null;
   checkInAt: string | null;
   checkOutAt: string | null;
+  timeZone: string;
   bookingUrl: string | null;
   notes: string | null;
 };
@@ -55,6 +73,7 @@ export type LiveItineraryItem = {
   details: string | null;
   startsAt: string;
   endsAt: string | null;
+  timeZone: string;
 };
 
 type TripRow = {
@@ -90,6 +109,8 @@ type TravelRow = {
   arrival_place: string;
   departs_at: string;
   arrives_at: string | null;
+  departure_time_zone: string;
+  arrival_time_zone: string;
   notes: string | null;
 };
 
@@ -100,6 +121,7 @@ type AccommodationRow = {
   address: string | null;
   check_in_at: string | null;
   check_out_at: string | null;
+  time_zone: string;
   booking_url: string | null;
   notes: string | null;
 };
@@ -111,6 +133,7 @@ type ItineraryRow = {
   details: string | null;
   starts_at: string;
   ends_at: string | null;
+  time_zone: string;
 };
 
 function mapTrip(row: TripRow): LiveTrip {
@@ -151,6 +174,8 @@ function mapTravel(row: TravelRow): LiveTravelSegment {
     arrivalPlace: row.arrival_place,
     departsAt: row.departs_at,
     arrivesAt: row.arrives_at,
+    departureTimeZone: row.departure_time_zone,
+    arrivalTimeZone: row.arrival_time_zone,
     notes: row.notes,
   };
 }
@@ -163,6 +188,7 @@ function mapAccommodation(row: AccommodationRow): LiveAccommodation {
     address: row.address,
     checkInAt: row.check_in_at,
     checkOutAt: row.check_out_at,
+    timeZone: row.time_zone,
     bookingUrl: row.booking_url,
     notes: row.notes,
   };
@@ -176,6 +202,7 @@ function mapItineraryItem(row: ItineraryRow): LiveItineraryItem {
     details: row.details,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
+    timeZone: row.time_zone,
   };
 }
 
@@ -309,6 +336,47 @@ export async function createTripInvitation(input: {
   return data;
 }
 
+export async function listTripInvitations(tripId: string): Promise<LiveTripInvitation[]> {
+  await getAuthenticatedUserId();
+  const { data, error } = await requireSupabase()
+    .from('trip_invitations')
+    .select('id,trip_id,invited_email,expires_at,max_uses,use_count,revoked_at,created_at')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as {
+    id: string;
+    trip_id: string;
+    invited_email: string | null;
+    expires_at: string;
+    max_uses: number;
+    use_count: number;
+    revoked_at: string | null;
+    created_at: string;
+  }[]).map((row) => ({
+    id: row.id,
+    tripId: row.trip_id,
+    invitedEmail: row.invited_email,
+    expiresAt: row.expires_at,
+    maxUses: row.max_uses,
+    useCount: row.use_count,
+    revokedAt: row.revoked_at,
+    createdAt: row.created_at,
+    isActive:
+      !row.revoked_at &&
+      row.use_count < row.max_uses &&
+      new Date(row.expires_at).getTime() > Date.now(),
+  }));
+}
+
+export async function revokeTripInvitation(invitationId: string): Promise<void> {
+  await getAuthenticatedUserId();
+  const { error } = await requireSupabase().rpc('revoke_trip_invitation', {
+    p_invitation_id: invitationId,
+  });
+  if (error) throw error;
+}
+
 export async function acceptTripInvitation(token: string): Promise<string> {
   await getAuthenticatedUserId();
   const { data, error } = await requireSupabase().rpc('accept_trip_invitation', {
@@ -337,6 +405,7 @@ export async function createTripResource(input: {
   provider?: string | null;
   details?: string | null;
   externalUrl?: string | null;
+  storagePath?: string | null;
 }): Promise<LiveTripResource> {
   const client = requireSupabase();
   const {
@@ -357,6 +426,7 @@ export async function createTripResource(input: {
       provider: input.provider?.trim() || null,
       details: input.details?.trim() || null,
       external_url: input.externalUrl,
+      storage_path: input.storagePath || null,
     })
     .select('id,trip_id,itinerary_item_id,kind,title,provider,external_url,storage_path,details')
     .single();
@@ -372,6 +442,7 @@ export async function updateTripResource(input: {
   provider?: string | null;
   details?: string | null;
   externalUrl?: string | null;
+  storagePath?: string | null;
 }): Promise<LiveTripResource> {
   await getAuthenticatedUserId();
   const { data, error } = await requireSupabase()
@@ -382,6 +453,7 @@ export async function updateTripResource(input: {
       provider: input.provider?.trim() || null,
       details: input.details?.trim() || null,
       external_url: input.externalUrl || null,
+      storage_path: input.storagePath || null,
     })
     .eq('id', input.id)
     .select('id,trip_id,itinerary_item_id,kind,title,provider,external_url,storage_path,details')
@@ -401,11 +473,57 @@ export async function deleteTripResource(id: string): Promise<void> {
   if (error) throw error;
 }
 
+function safeStorageFileName(value: string): string {
+  const cleaned = value
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(-120);
+  return cleaned || 'trip-document';
+}
+
+export async function uploadTripDocument(input: {
+  tripId: string;
+  file: Blob;
+  fileName: string;
+  contentType: string;
+}): Promise<string> {
+  if (input.file.size > MAX_TRIP_DOCUMENT_BYTES) {
+    throw new Error('Choose a file smaller than 10 MB.');
+  }
+  const userId = await getAuthenticatedUserId();
+  const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const storagePath = `${input.tripId}/${userId}/${suffix}-${safeStorageFileName(input.fileName)}`;
+  const { error } = await requireSupabase().storage.from(TRIP_DOCUMENT_BUCKET).upload(storagePath, input.file, {
+    cacheControl: '3600',
+    contentType: input.contentType || 'application/octet-stream',
+    upsert: false,
+  });
+  if (error) throw error;
+  return storagePath;
+}
+
+export async function createTripDocumentUrl(storagePath: string): Promise<string> {
+  await getAuthenticatedUserId();
+  const { data, error } = await requireSupabase().storage
+    .from(TRIP_DOCUMENT_BUCKET)
+    .createSignedUrl(storagePath, 10 * 60);
+  if (error) throw error;
+  if (!data.signedUrl) throw new Error('Could not create a secure file link.');
+  return data.signedUrl;
+}
+
+export async function deleteTripDocument(storagePath: string): Promise<void> {
+  await getAuthenticatedUserId();
+  const { error } = await requireSupabase().storage.from(TRIP_DOCUMENT_BUCKET).remove([storagePath]);
+  if (error) throw error;
+}
+
 export async function listTravelSegments(tripId: string): Promise<LiveTravelSegment[]> {
   const { data, error } = await requireSupabase()
     .from('travel_segments')
     .select(
-      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,notes',
+      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,departure_time_zone,arrival_time_zone,notes',
     )
     .eq('trip_id', tripId)
     .order('departs_at', { ascending: true });
@@ -422,7 +540,8 @@ export async function createTravelSegment(input: {
   arrivalPlace: string;
   departsAt: string;
   arrivesAt?: string | null;
-  timeZone: string;
+  departureTimeZone: string;
+  arrivalTimeZone: string;
   notes?: string | null;
 }): Promise<LiveTravelSegment> {
   const userId = await getAuthenticatedUserId();
@@ -440,12 +559,12 @@ export async function createTravelSegment(input: {
       arrival_place: input.arrivalPlace.trim(),
       departs_at: input.departsAt,
       arrives_at: input.arrivesAt || null,
-      departure_time_zone: input.timeZone,
-      arrival_time_zone: input.timeZone,
+      departure_time_zone: input.departureTimeZone,
+      arrival_time_zone: input.arrivalTimeZone,
       notes: input.notes?.trim() || null,
     })
     .select(
-      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,notes',
+      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,departure_time_zone,arrival_time_zone,notes',
     )
     .single();
   if (error) throw error;
@@ -462,7 +581,8 @@ export async function createTravelSegments(input: {
     arrivalPlace: string;
     departsAt: string;
     arrivesAt?: string | null;
-    timeZone: string;
+    departureTimeZone: string;
+    arrivalTimeZone: string;
     notes?: string | null;
   }[];
 }): Promise<LiveTravelSegment[]> {
@@ -480,15 +600,15 @@ export async function createTravelSegments(input: {
     arrival_place: segment.arrivalPlace.trim(),
     departs_at: segment.departsAt,
     arrives_at: segment.arrivesAt || null,
-    departure_time_zone: segment.timeZone,
-    arrival_time_zone: segment.timeZone,
+    departure_time_zone: segment.departureTimeZone,
+    arrival_time_zone: segment.arrivalTimeZone,
     notes: segment.notes?.trim() || null,
   }));
   const { data, error } = await requireSupabase()
     .from('travel_segments')
     .insert(rows)
     .select(
-      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,notes',
+      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,departure_time_zone,arrival_time_zone,notes',
     );
   if (error) throw error;
   return ((data ?? []) as TravelRow[])
@@ -505,7 +625,8 @@ export async function updateTravelSegment(input: {
   arrivalPlace: string;
   departsAt: string;
   arrivesAt?: string | null;
-  timeZone: string;
+  departureTimeZone: string;
+  arrivalTimeZone: string;
   notes?: string | null;
 }): Promise<LiveTravelSegment> {
   await getAuthenticatedUserId();
@@ -519,13 +640,13 @@ export async function updateTravelSegment(input: {
       arrival_place: input.arrivalPlace.trim(),
       departs_at: input.departsAt,
       arrives_at: input.arrivesAt || null,
-      departure_time_zone: input.timeZone,
-      arrival_time_zone: input.timeZone,
+      departure_time_zone: input.departureTimeZone,
+      arrival_time_zone: input.arrivalTimeZone,
       notes: input.notes?.trim() || null,
     })
     .eq('id', input.id)
     .select(
-      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,notes',
+      'id,trip_id,participant_id,kind,provider,service_number,departure_place,arrival_place,departs_at,arrives_at,departure_time_zone,arrival_time_zone,notes',
     )
     .single();
   if (error) throw error;
@@ -546,7 +667,7 @@ export async function deleteTravelSegment(id: string): Promise<void> {
 export async function listAccommodations(tripId: string): Promise<LiveAccommodation[]> {
   const { data, error } = await requireSupabase()
     .from('accommodations')
-    .select('id,trip_id,name,address,check_in_at,check_out_at,booking_url,notes')
+    .select('id,trip_id,name,address,check_in_at,check_out_at,time_zone,booking_url,notes')
     .eq('trip_id', tripId)
     .order('check_in_at', { ascending: true, nullsFirst: false });
   if (error) throw error;
@@ -577,7 +698,7 @@ export async function createAccommodation(input: {
       booking_url: input.bookingUrl || null,
       notes: input.notes?.trim() || null,
     })
-    .select('id,trip_id,name,address,check_in_at,check_out_at,booking_url,notes')
+    .select('id,trip_id,name,address,check_in_at,check_out_at,time_zone,booking_url,notes')
     .single();
   if (error) throw error;
   return mapAccommodation(data as AccommodationRow);
@@ -606,7 +727,7 @@ export async function updateAccommodation(input: {
       notes: input.notes?.trim() || null,
     })
     .eq('id', input.id)
-    .select('id,trip_id,name,address,check_in_at,check_out_at,booking_url,notes')
+    .select('id,trip_id,name,address,check_in_at,check_out_at,time_zone,booking_url,notes')
     .single();
   if (error) throw error;
   return mapAccommodation(data as AccommodationRow);
@@ -626,7 +747,7 @@ export async function deleteAccommodation(id: string): Promise<void> {
 export async function listItineraryItems(tripId: string): Promise<LiveItineraryItem[]> {
   const { data, error } = await requireSupabase()
     .from('itinerary_items')
-    .select('id,trip_id,title,details,starts_at,ends_at')
+    .select('id,trip_id,title,details,starts_at,ends_at,time_zone')
     .eq('trip_id', tripId)
     .order('starts_at', { ascending: true });
   if (error) throw error;
@@ -653,7 +774,7 @@ export async function createItineraryItem(input: {
       ends_at: input.endsAt || null,
       time_zone: input.timeZone,
     })
-    .select('id,trip_id,title,details,starts_at,ends_at')
+    .select('id,trip_id,title,details,starts_at,ends_at,time_zone')
     .single();
   if (error) throw error;
   return mapItineraryItem(data as ItineraryRow);
@@ -678,7 +799,7 @@ export async function updateItineraryItem(input: {
       time_zone: input.timeZone,
     })
     .eq('id', input.id)
-    .select('id,trip_id,title,details,starts_at,ends_at')
+    .select('id,trip_id,title,details,starts_at,ends_at,time_zone')
     .single();
   if (error) throw error;
   return mapItineraryItem(data as ItineraryRow);
