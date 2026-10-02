@@ -1,14 +1,18 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { ActionButton, Avatar, Card, Pill, PreviewNotice, RoundIcon, Screen, SectionTitle } from '@/components/design';
+import { ActionButton, Avatar, Card, Pill, PreviewNotice, RoundIcon, Screen } from '@/components/design';
+import { DestinationBackdrop } from '@/components/DestinationBackdrop';
+import { DestinationGuide } from '@/components/DestinationGuide';
+import { TripDetailsEditor } from '@/components/TripDetailsEditor';
+import { TripInvitation } from '@/components/TripInvitation';
+import { TripPlanManager } from '@/components/TripPlanManager';
 import { TripResources } from '@/components/TripResources';
 import { theme } from '@/constants/theme';
 import { getTrip, LiveTrip } from '@/data/live';
-import { previewTrip } from '@/data/preview';
 
 function formatDateRange(startDate: string | null, endDate: string | null): string {
   if (!startDate) return 'Dates to be added';
@@ -34,13 +38,35 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { isLoading: isAuthLoading, user } = useAuth();
-  const isPreview = tripId === previewTrip.id;
   const [liveTrip, setLiveTrip] = useState<LiveTrip | null>(null);
-  const [isLoading, setIsLoading] = useState(!isPreview);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditingTrip, setIsEditingTrip] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openTravelRequest, setOpenTravelRequest] = useState(0);
+  const [openEssentialsRequest, setOpenEssentialsRequest] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const travelOffset = useRef(0);
+  const essentialsOffset = useRef(0);
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+  const scrollTo = (offset: number) => {
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ animated: true, y: Math.max(0, offset - 12) }));
+  };
+  const openTravel = () => {
+    setOpenTravelRequest((current) => current + 1);
+    scrollTo(travelOffset.current);
+  };
+  const openEssentials = () => {
+    setOpenEssentialsRequest((current) => current + 1);
+    scrollTo(essentialsOffset.current);
+  };
 
   useEffect(() => {
-    if (isPreview || !tripId || !user) {
+    if (!tripId || !user) {
       void Promise.resolve().then(() => setIsLoading(false));
       return;
     }
@@ -63,13 +89,13 @@ export default function TripDetailScreen() {
     return () => {
       isMounted = false;
     };
-  }, [isPreview, tripId, user]);
+  }, [tripId, user]);
 
-  if (!isPreview && (isAuthLoading || isLoading)) {
+  if (isAuthLoading || isLoading) {
     return (
-      <Screen>
+      <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
+          <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
             <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
@@ -83,11 +109,11 @@ export default function TripDetailScreen() {
     );
   }
 
-  if (!isPreview && (!user || error || !liveTrip)) {
+  if (!user || error || !liveTrip) {
     return (
-      <Screen>
+      <Screen scrollRef={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
+          <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
             <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
           </Pressable>
           <PreviewNotice label="LIVE TRIP" />
@@ -100,36 +126,41 @@ export default function TripDetailScreen() {
             {error ?? 'Live trip details are visible only to authenticated trip members.'}
           </Text>
           {!user ? (
-            <ActionButton icon="login" label="Go to sign in" onPress={() => router.push('/profile')} />
+            <ActionButton
+              icon="login"
+              label="Go to sign in"
+              onPress={() =>
+                router.push({ pathname: '/profile', params: { redirect: `/trips/${tripId}` } })
+              }
+            />
           ) : null}
         </Card>
       </Screen>
     );
   }
 
-  const tripTitle = isPreview ? previewTrip.title : liveTrip!.title;
-  const tripLocation = isPreview
-    ? previewTrip.location
-    : liveTrip!.location ?? 'Location to be added';
-  const tripDateRange = isPreview
-    ? previewTrip.dateRange
-    : formatDateRange(liveTrip!.startDate, liveTrip!.endDate);
-  const countdown = isPreview ? previewTrip.daysUntil : getDaysUntil(liveTrip!.startDate);
+  const tripTitle = liveTrip.title;
+  const tripLocation = liveTrip.location ?? 'Location to be added';
+  const tripDateRange = formatDateRange(liveTrip.startDate, liveTrip.endDate);
+  const countdown = getDaysUntil(liveTrip.startDate);
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <View style={styles.topBar}>
-        <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
+        <Pressable accessibilityLabel="Go back" onPress={goBack} style={styles.backButton}>
           <MaterialCommunityIcons color={theme.colors.forest} name="arrow-left" size={22} />
         </Pressable>
-        <PreviewNotice label={isPreview ? 'PRODUCT PREVIEW' : 'LIVE TRIP'} />
-        <Pressable accessibilityLabel="Trip settings" style={styles.backButton}>
+        <PreviewNotice label="LIVE TRIP" />
+        <Pressable
+          accessibilityLabel="Edit trip details"
+          onPress={() => setIsEditingTrip((current) => !current)}
+          style={styles.backButton}>
           <MaterialCommunityIcons color={theme.colors.forest} name="dots-horizontal" size={22} />
         </Pressable>
       </View>
 
       <View style={styles.hero}>
-        <View style={styles.heroOrb} />
+        <DestinationBackdrop location={tripLocation} title={tripTitle} />
         <Pill tone="white">{countdown === null ? 'DATES PENDING' : `${countdown} DAYS AWAY`}</Pill>
         <View style={styles.heroCopy}>
           <Text style={styles.heroTitle}>{tripTitle}</Text>
@@ -141,102 +172,99 @@ export default function TripDetailScreen() {
             <Avatar initials="DM" />
             <Avatar initials="+2" offset />
           </View>
-          <ActionButton icon="account-plus-outline" label={isPreview ? 'Invite' : 'Invites next'} />
+          <ActionButton
+            icon="account-plus-outline"
+            label="Invite traveler"
+            onPress={() => setIsInviting((current) => !current)}
+          />
         </View>
       </View>
+
+      {isInviting ? (
+        <TripInvitation
+          onClose={() => setIsInviting(false)}
+          tripId={tripId}
+          tripTitle={tripTitle}
+        />
+      ) : null}
+
+      {isEditingTrip ? (
+        <TripDetailsEditor
+          onCancel={() => setIsEditingTrip(false)}
+          onSaved={(saved) => {
+            setLiveTrip(saved);
+            setIsEditingTrip(false);
+          }}
+          trip={liveTrip}
+        />
+      ) : null}
+
+      {liveTrip.description ? (
+        <Card style={styles.tripNoteCard}>
+          <View style={styles.tripNoteIcon}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="notebook-edit-outline" size={22} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.tripNoteLabel}>TRIP NOTE</Text>
+            <Text style={styles.tripNoteText}>{liveTrip.description}</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Edit trip note"
+            accessibilityRole="button"
+            onPress={() => setIsEditingTrip(true)}
+            style={styles.noteEditButton}>
+            <MaterialCommunityIcons color={theme.colors.forest} name="pencil-outline" size={17} />
+            <Text style={styles.noteEditText}>Edit</Text>
+          </Pressable>
+        </Card>
+      ) : null}
 
       <View style={styles.summaryGrid}>
-        <Card style={styles.summaryCard}>
-          <RoundIcon name="airplane-landing" />
-          <Text style={styles.summaryValue}>Travel to add</Text>
-          <Text style={styles.summaryLabel}>Arrival and return</Text>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
-          <Text style={styles.summaryValue}>{isPreview ? 'Tickets to link' : 'Trip essentials'}</Text>
-          <Text style={styles.summaryLabel}>{isPreview ? 'Game and parking' : 'Tickets, files, and links'}</Text>
-        </Card>
+        <Pressable
+          accessibilityHint="Opens the itinerary importer"
+          accessibilityRole="button"
+          onPress={openTravel}
+          style={({ pressed }) => [styles.summaryPressable, pressed && styles.pressed]}>
+          <Card style={styles.summaryCard}>
+            <RoundIcon name="airplane-landing" />
+            <Text style={styles.summaryValue}>Travel details</Text>
+            <Text style={styles.summaryLabel}>Tap to import, add, or edit flights and connections</Text>
+            <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={20} style={styles.summaryChevron} />
+          </Card>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Opens tickets, boarding passes, files, and links"
+          accessibilityRole="button"
+          onPress={openEssentials}
+          style={({ pressed }) => [styles.summaryPressable, pressed && styles.pressed]}>
+          <Card style={styles.summaryCard}>
+            <RoundIcon backgroundColor={theme.colors.coralSoft} color={theme.colors.coral} name="ticket-confirmation-outline" />
+            <Text style={styles.summaryValue}>Trip essentials</Text>
+            <Text style={styles.summaryLabel}>Tap for tickets, boarding passes, and links</Text>
+            <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={20} style={styles.summaryChevron} />
+          </Card>
+        </Pressable>
       </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="Add travel">Arrival board</SectionTitle>
-        <Card style={styles.flatCard}>
-          {isPreview
-            ? previewTrip.arrivals.map((arrival, index) => (
-                <View key={arrival.id} style={[styles.arrivalRow, index > 0 && styles.divider]}>
-                  <View style={styles.routeIcon}>
-                    <MaterialCommunityIcons color={theme.colors.forest} name="airplane" size={18} />
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.itemTitle}>{arrival.name}</Text>
-                    <Text style={styles.itemMeta}>{arrival.route}</Text>
-                  </View>
-                  <View style={styles.rightCopy}>
-                    <Text style={styles.itemTitle}>{arrival.arrivalTime}</Text>
-                    <Text style={styles.pendingText}>
-                      {arrival.status === 'missing' ? 'ADD DETAILS' : 'PLANNED'}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            : null}
-          <View style={[styles.arrivalRow, isPreview && styles.divider]}>
-            <View style={[styles.routeIcon, styles.missingIcon]}>
-              <MaterialCommunityIcons color={theme.colors.muted} name="plus" size={18} />
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.itemTitle}>
-                {isPreview ? '3 travelers need travel details' : 'No live travel details yet'}
-              </Text>
-              <Text style={styles.itemMeta}>
-                {isPreview ? 'Add arrival and return plans for the group' : 'Travel entry is the next pilot step'}
-              </Text>
-            </View>
-          </View>
-        </Card>
+      <View onLayout={(event) => { travelOffset.current = event.nativeEvent.layout.y; }}>
+        <TripPlanManager
+          initialTravelOpen={openTravelRequest > 0}
+          key={`travel-${openTravelRequest}`}
+          onOpenEssentials={openEssentials}
+          tripId={tripId}
+          tripLocation={liveTrip.location}
+        />
       </View>
 
-      <View style={styles.section}>
-        <SectionTitle action="See all days">Columbia plan</SectionTitle>
-        <Card>
-          {isPreview ? (
-            previewTrip.itinerary.map((item, index) => (
-              <View key={item.id} style={styles.planRow}>
-                <View style={styles.planTimeColumn}>
-                  <Text style={styles.planTime}>{item.time}</Text>
-                  {index < previewTrip.itinerary.length - 1 ? <View style={styles.timeline} /> : null}
-                </View>
-                <View style={styles.flex}>
-                  <Text style={styles.itemTitle}>{item.title}</Text>
-                  <Text style={styles.itemMeta}>{item.detail}</Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyPlan}>
-              <MaterialCommunityIcons color={theme.colors.moss} name="calendar-plus" size={28} />
-              <View style={styles.flex}>
-                <Text style={styles.itemTitle}>No live itinerary items yet</Text>
-                <Text style={styles.itemMeta}>Game-day and other itinerary editing comes after essentials.</Text>
-              </View>
-            </View>
-          )}
-        </Card>
+      <View onLayout={(event) => { essentialsOffset.current = event.nativeEvent.layout.y; }}>
+        <TripResources
+          initialOpen={openEssentialsRequest > 0}
+          key={`essentials-${openEssentialsRequest}`}
+          tripId={tripId}
+        />
       </View>
 
-      <TripResources
-        previewResources={isPreview ? previewTrip.resources : undefined}
-        tripId={tripId}
-      />
-
-      <Card style={styles.stayCard}>
-        <RoundIcon backgroundColor={theme.colors.forest} color={theme.colors.white} name="bed-king-outline" />
-        <View style={styles.flex}>
-          <Text style={styles.itemTitle}>Lodging</Text>
-          <Text style={styles.itemMeta}>Add address and check-in details</Text>
-        </View>
-        <MaterialCommunityIcons color={theme.colors.forest} name="chevron-right" size={22} />
-      </Card>
+      <DestinationGuide location={liveTrip.location} />
     </Screen>
   );
 }
@@ -245,18 +273,26 @@ const styles = StyleSheet.create({
   topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   backButton: { alignItems: 'center', backgroundColor: theme.colors.surface, borderColor: theme.colors.line, borderRadius: theme.radius.pill, borderWidth: 1, height: 42, justifyContent: 'center', width: 42 },
   centerCard: { alignItems: 'center', gap: theme.spacing.md, paddingVertical: theme.spacing.xxl },
-  hero: { backgroundColor: theme.colors.forest, borderRadius: 28, minHeight: 280, overflow: 'hidden', padding: theme.spacing.xl },
-  heroOrb: { backgroundColor: theme.colors.forestSoft, borderRadius: 160, height: 300, position: 'absolute', right: -100, top: -120, width: 300 },
+  hero: { backgroundColor: theme.colors.forest, borderRadius: 28, minHeight: 320, overflow: 'hidden', padding: theme.spacing.xl },
   heroCopy: { flex: 1, justifyContent: 'center' },
-  heroTitle: { color: theme.colors.white, fontFamily: 'serif', fontSize: 34, fontWeight: '800' },
-  heroLocation: { color: theme.colors.sage, fontSize: 14, marginTop: 5 },
-  heroDates: { color: theme.colors.white, fontSize: 13, fontWeight: '700', marginTop: 14 },
+  heroTitle: { color: theme.colors.white, fontFamily: 'serif', fontSize: 34, fontWeight: '800', textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 8 },
+  heroLocation: { color: theme.colors.white, fontSize: 14, fontWeight: '700', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 6 },
+  heroDates: { color: theme.colors.white, fontSize: 13, fontWeight: '700', marginTop: 14, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 6 },
   heroActions: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   avatarRow: { flexDirection: 'row' },
   summaryGrid: { flexDirection: 'row', gap: theme.spacing.md },
-  summaryCard: { flex: 1, gap: theme.spacing.sm },
+  summaryPressable: { flex: 1 },
+  summaryCard: { flex: 1, gap: theme.spacing.sm, minHeight: 164, position: 'relative' },
+  summaryChevron: { position: 'absolute', right: theme.spacing.md, top: theme.spacing.md },
   summaryValue: { color: theme.colors.ink, fontSize: 15, fontWeight: '800', marginTop: 3 },
-  summaryLabel: { color: theme.colors.muted, fontSize: 11 },
+  summaryLabel: { color: theme.colors.muted, fontSize: 11, lineHeight: 16 },
+  pressed: { opacity: 0.72 },
+  tripNoteCard: { alignItems: 'flex-start', backgroundColor: theme.colors.sage, flexDirection: 'row', gap: theme.spacing.md },
+  tripNoteIcon: { alignItems: 'center', backgroundColor: theme.colors.white, borderRadius: theme.radius.md, height: 42, justifyContent: 'center', width: 42 },
+  tripNoteLabel: { color: theme.colors.coral, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  tripNoteText: { color: theme.colors.ink, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  noteEditButton: { alignItems: 'center', borderColor: theme.colors.line, borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 5, minHeight: 36, paddingHorizontal: 10 },
+  noteEditText: { color: theme.colors.forest, fontSize: 10, fontWeight: '900' },
   section: { gap: theme.spacing.md },
   flatCard: { paddingVertical: 4 },
   arrivalRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 14 },

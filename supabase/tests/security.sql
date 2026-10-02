@@ -212,3 +212,40 @@ delete from public.trips where id='10000000-0000-0000-0000-000000000013';
 reset role;
 select pg_temp.assert_true(not exists(select 1 from public.trips where id='10000000-0000-0000-0000-000000000013'),'owner deletes populated trip');
 select pg_temp.assert_true(not exists(select 1 from public.trip_resources where id='56000000-0000-0000-0000-000000000013'),'trip deletion cascades to resources');
+
+-- Private trip documents are readable by trip members, writable by contributors,
+-- and cannot be uploaded into another user's folder or deleted by viewers.
+set role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',false);
+insert into storage.objects(bucket_id,name,owner_id) values (
+  'trip-documents',
+  '10000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000004/boarding-pass.pdf',
+  '00000000-0000-0000-0000-000000000004'
+);
+select pg_temp.expect_error(
+  $q$insert into storage.objects(bucket_id,name,owner_id) values ('trip-documents','10000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000005/wrong-owner.pdf','00000000-0000-0000-0000-000000000004')$q$,
+  '42501',
+  'row-level security policy'
+);
+reset role;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',false);
+select pg_temp.assert_true(
+  exists(select 1 from storage.objects where name like '%/boarding-pass.pdf'),
+  'trip viewer can read a private trip document'
+);
+with changed as (
+  delete from storage.objects where name like '%/boarding-pass.pdf' returning id
+)
+select pg_temp.assert_true(count(*)=0,'viewer cannot delete private trip documents') from changed;
+reset role;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+delete from storage.objects where name like '%/boarding-pass.pdf';
+reset role;
+select pg_temp.assert_true(
+  not exists(select 1 from storage.objects where name like '%/boarding-pass.pdf'),
+  'trip organizer can delete private trip documents'
+);

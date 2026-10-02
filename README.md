@@ -1,6 +1,6 @@
 # Wanderly / Tripboard
 
-A shared trip workspace built with Expo for iOS, Android, and web. The current checkpoint is a **pilot build**: unsigned users see a fixture-backed Columbia preview, while authenticated users can create the live Columbia trip and save tickets, confirmations, parking details, documents, and shared-album links.
+A shared trip workspace built with Expo for iOS, Android, and web. The current checkpoint is a **pilot build**: signed-out users get an explicit sign-in gate, while authenticated users can create and edit real trips; invite travelers securely; manage travel, lodging, and daily plans; export calendar entries; and save tickets, confirmations, parking details, documents, and shared-album links.
 
 ## Current checkpoint
 
@@ -8,6 +8,11 @@ A shared trip workspace built with Expo for iOS, Android, and web. The current c
 - A reviewed initial Supabase schema with RLS, protected ownership/membership invariants, durable participants, and integer-minor-unit expenses
 - Tokenized invitation functions that require confirmed, non-anonymous accounts
 - Passwordless email sign-in, live trip creation, and member-only ticket/file/link reads and writes
+- Generic trip creation plus secure, email-bound, single-use guest invitations
+- Live trip, travel, lodging, itinerary, and trip-resource create/update/delete workflows
+- Portable `.ics` calendar export for travel, lodging, and itinerary entries
+- An art-directed Columbia cover set with clear image attribution, plus attributed destination-photo fallbacks
+- A Columbia local guide organized around game day, food, coffee, hidden gems, outdoors, shopping, practical notes, and local history
 - Database migration/security tests plus lint, type checking, unit tests, and web export in CI
 
 ## Run locally
@@ -20,7 +25,7 @@ cp .env.example .env.local
 npm start
 ```
 
-Without public Supabase values, the application remains in Preview mode. Never commit credentials. The publishable key is client-visible; security still depends on correctly deployed grants, RLS, Auth settings, and platform verification. Never put a secret or service-role key in an `EXPO_PUBLIC_` variable.
+Without public Supabase values, the application shows a configuration error instead of a fake editable trip. Never commit credentials. The publishable key is client-visible; security still depends on correctly deployed grants, RLS, Auth settings, and platform verification. Never put a secret or service-role key in an `EXPO_PUBLIC_` variable.
 
 ## Database model
 

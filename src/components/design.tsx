@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { ComponentProps, ReactNode } from 'react';
+import { ComponentProps, ReactNode, Ref } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -15,11 +15,12 @@ import { theme } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-export function Screen({ children }: { children: ReactNode }) {
+export function Screen({ children, scrollRef }: { children: ReactNode; scrollRef?: Ref<ScrollView> }) {
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.screenContent}
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}>
         {children}
       </ScrollView>
@@ -141,7 +142,7 @@ export function Avatar({ initials, offset = false }: { initials: string; offset?
   );
 }
 
-export function PreviewNotice({ label = 'PRODUCT PREVIEW' }: { label?: string }) {
+export function PreviewNotice({ label = 'PILOT STATUS' }: { label?: string }) {
   return (
     <View style={styles.previewNotice}>
       <MaterialCommunityIcons color={theme.colors.coral} name="flask-outline" size={15} />

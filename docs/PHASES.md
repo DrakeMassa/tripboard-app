@@ -7,14 +7,18 @@
 - Secure invitation acceptance and membership roles
 - Arrival and departure board
 - Lodging cards
+- Editable itinerary and one-tap standard calendar export
 - Tickets, confirmations, parking details, document links, and shared-album links
 - Empty, loading, error, and offline states
 - Family-friendly contextual onboarding
 
 Exit condition: a real group can sign in, join a trip securely, find its essential tickets and links, and answer “when does everyone arrive?” without using mock data.
 
-## Phase 2 — Trip Inbox and places
+## Phase 2 — imports, Trip Inbox, and places
 
+- Private confirmation-email forwarding with review-before-save
+- Optional Google Calendar and Microsoft Outlook calendar connections
+- Provider deep links for live boarding passes, tickets, and wallet handoff
 - iOS and Android share-extension proof of concept
 - Receive TikTok, Instagram, YouTube, and ordinary web links
 - Store the original URL even when metadata extraction fails
@@ -22,7 +26,7 @@ Exit condition: a real group can sign in, join a trip securely, find its essenti
 - Extract candidate places with user confirmation
 - Map/list views and reservation-provider deep links
 
-Exit condition: sharing a supported link from another app reliably adds it to one selected trip.
+Exit condition: forwarding a confirmation or sharing a supported link reliably creates one reviewable import in the selected trip without duplicate records.
 
 ## Phase 3 — itinerary and assistant
 
